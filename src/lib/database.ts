@@ -420,10 +420,12 @@ export const sessionDb = {
                 COALESCE(sl.name, sn.location_other) as location,
                 sn.generated_note as "generatedNote", sn.custom_feedback as feedback,
                 sn.status, sn.created_at as "createdAt",
-                c.first_name || ' ' || c.last_initial || '.' as client_name
+                c.first_name || ' ' || c.last_initial || '.' as client_name,
+                u.username as user_name
          FROM session_notes sn
          LEFT JOIN session_locations sl ON sn.location_id = sl.id
          LEFT JOIN clients c ON sn.client_id = c.id
+         LEFT JOIN users u ON sn.user_id = u.id
          WHERE ${adminViewAll ? '1=1' : 'sn.user_id = $1'}`;
       
       const params: (string | number)[] = adminViewAll ? [] : [userId];
@@ -496,10 +498,12 @@ export const sessionDb = {
                 COALESCE(sl.name, sn.location_other) as location,
                 sn.generated_note as "generatedNote", sn.custom_feedback as feedback,
                 sn.status, sn.created_at as "createdAt",
-                c.first_name || ' ' || c.last_initial || '.' as client_name
+                c.first_name || ' ' || c.last_initial || '.' as client_name,
+                u.username as user_name
          FROM session_notes sn
          LEFT JOIN session_locations sl ON sn.location_id = sl.id
          LEFT JOIN clients c ON sn.client_id = c.id
+         LEFT JOIN users u ON sn.user_id = u.id
          WHERE sn.user_id = $1 AND sn.session_date BETWEEN $2 AND $3
          ORDER BY sn.session_date DESC, sn.created_at DESC
          LIMIT $4 OFFSET $5`,

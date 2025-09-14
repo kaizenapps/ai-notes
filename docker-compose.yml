@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: session-notes-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: session_notes
+      POSTGRES_USER: session_user
+      POSTGRES_PASSWORD: session_password_123
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/sample_data.sql:/docker-entrypoint-initdb.d/02-sample_data.sql:ro
+    networks:
+      - session-notes-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U session_user -d session_notes"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Next.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: session-notes-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://session_user:session_password_123@postgres:5432/session_notes
+      JWT_SECRET: your_jwt_secret_key_here_minimum_32_characters_long
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      NEXT_PUBLIC_APP_URL: http://localhost
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - session-notes-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Reverse Proxy with SSL
+  nginx:
+    image: nginx:alpine
+    container_name: session-notes-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - session-notes-network
+    command: >
+      sh -c "
+        # Generate self-signed SSL certificate if not exists
+        if [ ! -f /etc/nginx/ssl/cert.pem ]; then
+          echo 'Generating self-signed SSL certificate...'
+          mkdir -p /etc/nginx/ssl
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout /etc/nginx/ssl/key.pem \
+            -out /etc/nginx/ssl/cert.pem \
+            -subj '/C=US/ST=State/L=City/O=Organization/CN=localhost'
+          echo 'SSL certificate generated'
+        fi
+        # Start nginx
+        nginx -g 'daemon off;'
+      "
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  session-notes-network:
+    driver: bridge

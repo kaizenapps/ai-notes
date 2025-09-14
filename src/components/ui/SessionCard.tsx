@@ -6,9 +6,10 @@ export interface SessionCardProps {
   session: {
     id: string;
     client_name?: string;
+    user_name?: string;
     clientId: string;
     userId: string;
-    date: Date;
+    date: Date | string;
     duration: number;
     location: string;
     objectives: string[];
@@ -16,13 +17,14 @@ export interface SessionCardProps {
     generatedNote: string;
     feedback?: string;
     status: 'draft' | 'completed' | 'archived';
-    createdAt: Date;
+    createdAt: Date | string;
   };
   onEdit?: (session: SessionCardProps['session']) => void;
   onDelete?: (sessionId: string) => void;
   onExport?: (sessionId: string, format: 'pdf' | 'docx' | 'txt') => void;
   onStatusChange?: (sessionId: string, status: 'draft' | 'completed' | 'archived') => void;
   showClientName?: boolean;
+  showUserName?: boolean;
 }
 
 export function SessionCard({
@@ -31,7 +33,8 @@ export function SessionCard({
   onDelete,
   onExport,
   onStatusChange,
-  showClientName = true
+  showClientName = true,
+  showUserName = false
 }: SessionCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -59,16 +62,18 @@ export function SessionCard({
     }
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
+  const formatDate = (date: Date | string) => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return dateObj.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
     });
   };
 
-  const formatDateTime = (date: Date) => {
-    return date.toLocaleString('en-US', {
+  const formatDateTime = (date: Date | string) => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return dateObj.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -95,6 +100,17 @@ export function SessionCard({
                  session.status === 'archived' ? 'Archived' : 'Draft'}
               </span>
             </div>
+            
+            {showUserName && session.user_name && (
+              <div className="mb-2">
+                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-full">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  {session.user_name}
+                </span>
+              </div>
+            )}
             
             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
               <div className="flex items-center gap-1">

@@ -11,9 +11,12 @@ import { apiGet } from '@/lib/api';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
-interface SessionHistoryItem extends SessionNote {
+interface SessionHistoryItem extends Omit<SessionNote, 'date' | 'createdAt'> {
   client_name?: string;
+  user_name?: string;
   status: 'draft' | 'completed' | 'archived';
+  date: Date | string;
+  createdAt: Date | string;
 }
 
 function HistoryPageContent() {
@@ -231,7 +234,7 @@ function HistoryPageContent() {
   const openEditForm = (session: SessionHistoryItem) => {
     setEditingSession(session);
     setEditFormData({
-      sessionDate: new Date(session.date).toISOString().split('T')[0],
+      sessionDate: (typeof session.date === 'string' ? new Date(session.date) : session.date).toISOString().split('T')[0],
       duration: session.duration.toString(),
       location: session.location,
       generatedNote: session.generatedNote,
@@ -545,6 +548,7 @@ function HistoryPageContent() {
                     onExport={exportSession}
                     onStatusChange={handleQuickStatusChange}
                     showClientName={true}
+                    showUserName={user?.role === 'admin' && viewAllSessions}
                   />
                 ))}
               
