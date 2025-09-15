@@ -7,27 +7,48 @@ set -eu
 
 DB_NAME=${POSTGRES_DB:-session_notes}
 DB_USER=${POSTGRES_USER:-session_user}
+# Support either custom dump (.dump) or plain SQL (.sql)
+DUMP_PATH="/docker-entrypoint-initdb.d/01-database.dump"
 SQL_PATH="/docker-entrypoint-initdb.d/01-database.sql"
+READY_FLAG="/var/lib/postgresql/data/.restored_ok"
 
-if [ ! -f "$SQL_PATH" ]; then
-  echo "[init-restore] No database file found at $SQL_PATH, skipping."
+rm -f "$READY_FLAG" || true
+
+# Prefer custom dump if present, else use SQL
+SRC_FILE=""
+if [ -f "$DUMP_PATH" ]; then
+  SRC_FILE="$DUMP_PATH"
+elif [ -f "$SQL_PATH" ]; then
+  SRC_FILE="$SQL_PATH"
+else
+  echo "[init-restore] No database dump found (.dump or .sql), skipping."
   exit 0
 fi
 
 # Detect custom-format dump
 # Custom dump starts with: PGDMP\n
-if head -c 5 "$SQL_PATH" | grep -q "PGDMP"; then
+if head -c 5 "$SRC_FILE" | grep -q "PGDMP"; then
   echo "[init-restore] Detected custom-format dump. Restoring with pg_restore..."
   # Restore
   # Drop/clean if objects exist; ignore owner/privileges; map ownership to DB_USER
-  pg_restore \
+  if pg_restore \
     --clean --if-exists \
     --no-owner --no-privileges \
     --role "$DB_USER" \
-    -v -U "$DB_USER" -d "$DB_NAME" "$SQL_PATH"
-  echo "[init-restore] pg_restore completed."
+    -v -U "$DB_USER" -d "$DB_NAME" "$SRC_FILE"; then
+    echo "[init-restore] pg_restore completed."
+    touch "$READY_FLAG"
+  else
+    echo "[init-restore] pg_restore failed." >&2
+    exit 1
+  fi
 else
   echo "[init-restore] Detected plain SQL. Restoring with psql..."
-  psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME" -f "$SQL_PATH"
-  echo "[init-restore] psql restore completed."
+  if psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME" -f "$SRC_FILE"; then
+    echo "[init-restore] psql restore completed."
+    touch "$READY_FLAG"
+  else
+    echo "[init-restore] psql restore failed." >&2
+    exit 1
+  fi
 fi

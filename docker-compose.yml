@@ -16,11 +16,11 @@ services:
     networks:
       - session-notes-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U session_user -d session_notes || exit 1"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U session_user -d session_notes && [ -f /var/lib/postgresql/data/.restored_ok ] || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 30
+      start_period: 60s
 
   # Next.js Application
   app:
