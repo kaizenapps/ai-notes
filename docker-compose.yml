@@ -11,7 +11,7 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/database.sql:/docker-entrypoint-initdb.d/01-database.sql:ro
+      - ./database/database.sql:/docker-entrypoint-initdb.d/01-database.dump:ro
       - ./database/init-restore.sh:/docker-entrypoint-initdb.d/00-init-restore.sh:ro
     networks:
       - session-notes-network
