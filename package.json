@@ -11,10 +11,10 @@
     "db:setup-with-data": "node database/migration.js --sample-data",
     "db:reset": "node database/migration.js --sample-data",
     "db:remove-billing": "psql $DATABASE_URL -f database/remove_billing.sql",
-    "docker:up": "docker-compose up -d",
+    "docker:up": "docker-compose up -d && node scripts/print-info.js",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
-    "docker:build": "docker-compose up -d --build"
+    "docker:build": "docker-compose up -d --build && node scripts/print-info.js"
   },
   "dependencies": {
     "dotenv": "^17.2.2",
