@@ -32,7 +32,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://session_user:session_password_123@postgres:5432/session_notes
-      JWT_SECRET: your_jwt_secret_key_here_minimum_32_characters_long
+      JWT_SECRET: s3ssion-notes-super-secret-jwt-key-9a7f4c2d8b1e
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       NEXT_PUBLIC_APP_URL: http://localhost
     depends_on:
