@@ -29,6 +29,8 @@ services:
       dockerfile: Dockerfile
     container_name: session-notes-app
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://session_user:session_password_123@postgres:5432/session_notes
@@ -41,42 +43,10 @@ services:
     networks:
       - session-notes-network
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health >/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-
-  # Nginx Reverse Proxy with SSL
-  nginx:
-    image: nginx:alpine
-    container_name: session-notes-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - app
-    networks:
-      - session-notes-network
-    command: >
-      sh -c "
-        # Generate self-signed SSL certificate if not exists
-        if [ ! -f /etc/nginx/ssl/cert.pem ]; then
-          echo 'Generating self-signed SSL certificate...'
-          mkdir -p /etc/nginx/ssl
-          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout /etc/nginx/ssl/key.pem \
-            -out /etc/nginx/ssl/cert.pem \
-            -subj '/C=US/ST=State/L=City/O=Organization/CN=localhost'
-          echo 'SSL certificate generated'
-        fi
-        # Start nginx
-        nginx -g 'daemon off;'
-      "
 
 volumes:
   postgres_data:
