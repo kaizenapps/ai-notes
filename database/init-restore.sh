@@ -18,10 +18,13 @@ fi
 # Custom dump starts with: PGDMP\n
 if head -c 5 "$SQL_PATH" | grep -q "PGDMP"; then
   echo "[init-restore] Detected custom-format dump. Restoring with pg_restore..."
-  # Create the target DB if not already created by entrypoint
-  psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d postgres -c "CREATE DATABASE \"$DB_NAME\" WITH TEMPLATE=template0 ENCODING='UTF8';" || true
   # Restore
-  pg_restore -v -U "$DB_USER" -d "$DB_NAME" "$SQL_PATH"
+  # Drop/clean if objects exist; ignore owner/privileges; map ownership to DB_USER
+  pg_restore \
+    --clean --if-exists \
+    --no-owner --no-privileges \
+    --role "$DB_USER" \
+    -v -U "$DB_USER" -d "$DB_NAME" "$SQL_PATH"
   echo "[init-restore] pg_restore completed."
 else
   echo "[init-restore] Detected plain SQL. Restoring with psql..."
