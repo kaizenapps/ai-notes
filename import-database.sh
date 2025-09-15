@@ -92,3 +92,4 @@ esac
 
 echo -e "${GREEN}🎉 Database import completed!${NC}"
 echo -e "${YELLOW}📋 You can now start the application with: docker-compose up -d${NC}"
+

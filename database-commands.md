@@ -122,3 +122,4 @@ chmod 644 your_file.sql
 # Test SQL syntax
 docker-compose exec postgres psql -U session_user -d session_notes -c "SELECT 1;"
 ```
+
