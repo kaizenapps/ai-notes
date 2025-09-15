@@ -12,6 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/database.sql:/docker-entrypoint-initdb.d/01-database.sql:ro
+      - ./database/init-restore.sh:/docker-entrypoint-initdb.d/00-init-restore.sh:ro
     networks:
       - session-notes-network
     healthcheck:
