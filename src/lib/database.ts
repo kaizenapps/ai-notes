@@ -18,7 +18,9 @@ interface SessionTemplate {
 // Create connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  // In many Docker setups Postgres does NOT have SSL enabled. Make SSL opt-in via DB_SSL env.
+  // Set DB_SSL=true only if your server provides SSL. This avoids connection failures in prod.
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
