@@ -125,11 +125,6 @@ interface SessionTemplate {
       return;
     }
     const feedbackValue = (formData.get('feedback') as string || '').trim();
-    if (!feedbackValue) {
-      setError('Additional Notes is required.');
-      setLoading(false);
-      return;
-    }
     
     try {
       const sessionData = {

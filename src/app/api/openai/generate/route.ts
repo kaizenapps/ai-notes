@@ -58,18 +58,18 @@ interface SessionData {
   duration: string;
   objectives: string[];
   interventions: string[];
-  feedback: string;
+  feedback?: string;
 }
 
 function buildPrompt(data: SessionData): string {
+  const extra = data.feedback && data.feedback.trim().length > 0 ? `\n- Additional Notes: ${data.feedback.trim()}` : '';
   return `You are a peer support specialist creating session documentation. Use peer-support language only, avoid therapist terminology, and never include last names.
 
 Input Data:
 - Location: ${data.location}
 - Duration: ${data.duration} minutes
 - Objectives: ${data.objectives.join(', ')}
-- Interventions: ${data.interventions.join(', ')}
-- Additional Notes: ${data.feedback}
+${extra}
 
 Instructions:
 - Incorporate the Additional Notes content faithfully.
