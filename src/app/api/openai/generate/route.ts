@@ -22,9 +22,7 @@ export async function POST(request: NextRequest) {
   
   try {
     if (!process.env.OPENAI_API_KEY) {
-      return Response.json({ 
-        note: generateMockNote(data) 
-      });
+      return Response.json({ error: 'OpenAI API key not configured' }, { status: 500 });
     }
     
     const prompt = buildPrompt(data);
@@ -51,10 +49,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ note: filteredNote });
   } catch (error) {
     console.error('OpenAI API error:', error);
-    // Fallback to mock note if OpenAI fails
-    return Response.json({ 
-      note: generateMockNote(data) 
-    });
+    return Response.json({ error: 'Failed to generate note' }, { status: 500 });
   }
 }
 
@@ -63,22 +58,31 @@ interface SessionData {
   duration: string;
   objectives: string[];
   interventions: string[];
+  feedback: string;
 }
 
 function buildPrompt(data: SessionData): string {
-  return `Generate a peer support session note with these details:
-    Location: ${data.location}
-    Duration: ${data.duration} minutes
-    Objectives: ${data.objectives.join(', ')}
-    Interventions: ${data.interventions.join(', ')}
-    
-    Format:
-    - Location of Meeting
-    - Focus of the meeting
-    - Activities (time-based breakdown)
-    - Peer Support Interventions
-    - Patient Response/Content
-    - Plan for next session`;
+  return `You are a peer support specialist creating session documentation. Use peer-support language only, avoid therapist terminology, and never include last names.
+
+Input Data:
+- Location: ${data.location}
+- Duration: ${data.duration} minutes
+- Objectives: ${data.objectives.join(', ')}
+- Interventions: ${data.interventions.join(', ')}
+- Additional Notes: ${data.feedback}
+
+Instructions:
+- Incorporate the Additional Notes content faithfully.
+- Be concise, factual, and avoid diagnoses or clinical judgments.
+- Do not invent details beyond the inputs.
+
+Output strictly in this structure with headings exactly as written (no extra headings):
+Location of Meeting:
+Focus of the Meeting:
+Activities (time-based breakdown):
+Peer Support Interventions:
+Patient Response/Content:
+Plan for Next Session:`;
 }
 
 function generateMockNote(data: SessionData): string {

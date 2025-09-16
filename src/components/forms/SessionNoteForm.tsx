@@ -124,6 +124,12 @@ interface SessionTemplate {
       setLoading(false);
       return;
     }
+    const feedbackValue = (formData.get('feedback') as string || '').trim();
+    if (!feedbackValue) {
+      setError('Additional Notes is required.');
+      setLoading(false);
+      return;
+    }
     
     try {
       const sessionData = {
@@ -132,7 +138,7 @@ interface SessionTemplate {
         duration: selectedDuration,
         objectives: selectedObjectives,
         interventions: selectedInterventions,
-        feedback: formData.get('feedback') as string,
+        feedback: feedbackValue,
       };
 
       const note = await generateSessionNote(sessionData);

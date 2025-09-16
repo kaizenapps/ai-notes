@@ -514,25 +514,27 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* Action Bar */}
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">
-                {tabLabels[activeTab]}
-              </h2>
-              <p className="text-sm text-gray-600">
-                Manage {activeTab} used in session forms
-              </p>
-            </div>
-            {activeTab !== 'templates' && activeTab !== 'users' && (
+          {/* Action Bar (hidden for tabs that render their own headings) */}
+          {activeTab !== 'templates' && activeTab !== 'users' ? (
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {tabLabels[activeTab]}
+                </h2>
+                <p className="text-sm text-gray-600">
+                  Manage {activeTab} used in session forms
+                </p>
+              </div>
               <button
                 onClick={() => openForm()}
                 className={styles.button.primary}
               >
                 Add New {activeTab.slice(0, -1).charAt(0).toUpperCase() + activeTab.slice(1, -1)}
               </button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="mb-6" />
+          )}
 
           {/* Content Area */}
           {activeTab === 'templates' ? (
