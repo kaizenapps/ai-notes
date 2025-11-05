@@ -76,8 +76,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       generatedNote,
       customFeedback,
       status,
-      objectives,
-      interventions
+      objectives
     } = body;
 
     // Update session in database
@@ -92,10 +91,6 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       objectives: objectives?.map((obj: { id?: string; custom?: string; name?: string }) => ({
         id: obj.id,
         custom: obj.custom || obj.name
-      })),
-      interventions: interventions?.map((int: { id?: string; custom?: string; name?: string }) => ({
-        id: int.id,
-        custom: int.custom || int.name
       }))
     }, payload.userId);
 

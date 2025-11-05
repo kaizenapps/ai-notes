@@ -5,8 +5,10 @@ import { useApp } from '@/context/AppContext';
 import { generateSessionNote } from '@/lib/openai';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ToastNotification } from '@/components/ui/Notification';
 import { styles } from '@/lib/styles';
 import { useSearchParams } from 'next/navigation';
+import { extractInterventionText } from '@/lib/treatmentPlanParser';
 
 function SessionNoteFormContent() {
   const [loading, setLoading] = useState(false);
@@ -15,22 +17,20 @@ function SessionNoteFormContent() {
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
   const [selectedDuration, setSelectedDuration] = useState('60');
+  const [objectivesAutoPopulated, setObjectivesAutoPopulated] = useState(false);
   const [selectedObjectives, setSelectedObjectives] = useState<string[]>([]);
-  const [selectedInterventions, setSelectedInterventions] = useState<string[]>([]);
+  const [treatmentPlanText, setTreatmentPlanText] = useState('');
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState('');
-  const [templates, setTemplates] = useState<SessionTemplate[]>([]);
-
-interface SessionTemplate {
-  id: string;
-  name: string;
-  description?: string;
-  defaultDuration?: number;
-  defaultLocationName?: string;
-  templateObjectives: string[];
-  templateInterventions: string[];
-}
-  const { clients, locations, objectives, interventions } = useApp();
+  const [notification, setNotification] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    message: '',
+    type: 'info'
+  });
+  const { clients, locations, objectives, setClients } = useApp();
   const searchParams = useSearchParams();
 
   // Pre-select client from URL params
@@ -41,71 +41,38 @@ interface SessionTemplate {
     }
   }, [searchParams, clients]);
 
-  // Load templates on component mount
+  // Auto-populate objectives and treatment plan when client is selected
   useEffect(() => {
-    const loadTemplates = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-
-        const response = await fetch('/api/templates', {
-          headers: {
-            'Authorization': `Bearer ${token}`
+    if (selectedClientId) {
+      const selectedClient = clients.find(client => client.id === selectedClientId);
+      if (selectedClient) {
+        // Auto-populate objectives
+        if (selectedClient.objectivesSelected && selectedClient.objectivesSelected.length > 0) {
+          // Convert objective IDs to names for the form
+          const objectiveNames = selectedClient.objectivesSelected
+            .map(objId => {
+              const objective = objectives.find(obj => obj.id === objId);
+              return objective?.name;
+            })
+            .filter(Boolean) as string[];
+          
+          if (objectiveNames.length > 0) {
+            setSelectedObjectives(objectiveNames);
+            setObjectivesAutoPopulated(true);
           }
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success && result.data) {
-            setTemplates(result.data);
-          }
+        } else {
+          setObjectivesAutoPopulated(false);
         }
-      } catch (error) {
-        console.warn('Failed to load templates:', error);
-      }
-    };
-
-    loadTemplates();
-  }, []);
-
-  // Handle template selection
-  const handleTemplateChange = (templateId: string) => {
-    setSelectedTemplate(templateId);
-    
-    if (templateId) {
-      const template = templates.find(t => t.id === templateId);
-      if (template) {
-        console.log('Applying template:', template);
-        console.log('Template objectives:', template.templateObjectives);
-        console.log('Template interventions:', template.templateInterventions);
         
-        // Pre-fill form with template defaults
-        if (template.defaultDuration) {
-          setSelectedDuration(template.defaultDuration.toString());
-          console.log('Set duration to:', template.defaultDuration);
-        }
-        if (template.defaultLocationName) {
-          setSelectedLocation(template.defaultLocationName);
-          console.log('Set location to:', template.defaultLocationName);
-        }
-        if (template.templateObjectives && template.templateObjectives.length > 0) {
-          setSelectedObjectives([...template.templateObjectives]); // Create new array to trigger re-render
-          console.log('Set objectives to:', template.templateObjectives);
-        }
-        if (template.templateInterventions && template.templateInterventions.length > 0) {
-          setSelectedInterventions([...template.templateInterventions]); // Create new array to trigger re-render
-          console.log('Set interventions to:', template.templateInterventions);
-        }
+        // Auto-populate treatment plan
+        setTreatmentPlanText(selectedClient.treatmentPlan || '');
       }
     } else {
-      // Clear template selections
-      setSelectedDuration('60');
-      setSelectedLocation('');
-      setSelectedObjectives([]);
-      setSelectedInterventions([]);
+      setObjectivesAutoPopulated(false);
+      setTreatmentPlanText('');
     }
-  };
-  
+  }, [selectedClientId, clients, objectives]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -113,27 +80,121 @@ interface SessionTemplate {
     
     const formData = new FormData(e.currentTarget);
     
+    // Read all required fields from form to ensure we get current values, not stale state
+    const clientIdValue = (formData.get('clientId') as string || '').trim();
+    const locationValue = (formData.get('location') as string || '').trim();
+    const durationValue = (formData.get('duration') as string || '').trim();
+    const feedbackValue = (formData.get('feedback') as string || '').trim();
+    
+    // Validate all required fields
+    if (!clientIdValue) {
+      setError('Please select a client.');
+      setLoading(false);
+      return;
+    }
+    
+    if (!locationValue) {
+      setError('Please select a location.');
+      setLoading(false);
+      return;
+    }
+    
+    if (!durationValue || isNaN(parseInt(durationValue)) || parseInt(durationValue) <= 0) {
+      setError('Please select a valid session duration.');
+      setLoading(false);
+      return;
+    }
+    
     if (selectedObjectives.length === 0) {
       setError('Please select at least one objective.');
       setLoading(false);
       return;
     }
     
-    if (selectedInterventions.length === 0) {
-      setError('Please select at least one intervention.');
-      setLoading(false);
-      return;
-    }
-    const feedbackValue = (formData.get('feedback') as string || '').trim();
+    console.log('Form submission data:', {
+      clientId: clientIdValue,
+      location: locationValue,
+      duration: durationValue,
+      objectives: selectedObjectives,
+      hasTreatmentPlan: !!treatmentPlanText.trim()
+    });
     
     try {
+      // Get client treatment plan for intervention extraction
+      const selectedClient = clients.find(c => c.id === clientIdValue);
+      if (!selectedClient) {
+        setError('Selected client not found. Please refresh and try again.');
+        setLoading(false);
+        return;
+      }
+      
+      let interventionText: string;
+      
+      // Save/update treatment plan to client if it was modified
+      if (treatmentPlanText.trim() !== (selectedClient.treatmentPlan || '')) {
+        try {
+          const updateResponse = await fetch(`/api/clients/${clientIdValue}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({
+              treatmentPlan: treatmentPlanText.trim()
+            })
+          });
+          
+          if (updateResponse.ok) {
+            console.log('Treatment plan updated for client');
+            // Refresh clients list to get updated treatment plan
+            try {
+              const clientsResponse = await fetch('/api/clients', {
+                headers: {
+                  'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+              });
+              if (clientsResponse.ok) {
+                const clientsResult = await clientsResponse.json();
+                if (clientsResult.success && clientsResult.data) {
+                  setClients(clientsResult.data);
+                }
+              }
+            } catch (refreshError) {
+              console.warn('Failed to refresh clients:', refreshError);
+            }
+          }
+        } catch (updateError) {
+          console.warn('Failed to update treatment plan:', updateError);
+          // Continue anyway - session note generation shouldn't fail
+        }
+      }
+      
+      // Always auto-extract from treatment plan based on selected objectives (use textarea value)
+      if (treatmentPlanText.trim() && selectedObjectives.length > 0) {
+        console.log('Attempting intervention extraction:', {
+          hasTreatmentPlan: !!treatmentPlanText.trim(),
+          treatmentPlanLength: treatmentPlanText.trim().length,
+          objectives: selectedObjectives
+        });
+        const extractedIntervention = extractInterventionText(
+          treatmentPlanText.trim(),
+          selectedObjectives
+        );
+        console.log('Extracted intervention:', extractedIntervention);
+        interventionText = extractedIntervention || 'Peer support interventions';
+      } 
+      // Fallback if no treatment plan
+      else {
+        interventionText = 'Peer support interventions focused on client goals';
+      }
+
       const sessionData = {
-        clientId: selectedClientId,
-        location: selectedLocation,
-        duration: selectedDuration,
-        objectives: selectedObjectives,
-        interventions: selectedInterventions,
-        feedback: feedbackValue,
+        clientId: clientIdValue, // Use value from form, not state
+        location: locationValue, // Use value from form, not state
+        duration: durationValue, // Use value from form, not state
+        objectives: selectedObjectives, // MultiSelect uses controlled state (correct)
+        feedback: feedbackValue, // Use value from form, not state
+        treatmentPlan: treatmentPlanText.trim(), // Textarea uses controlled state (correct)
       };
 
       const note = await generateSessionNote(sessionData);
@@ -157,7 +218,6 @@ interface SessionTemplate {
             customFeedback: sessionData.feedback,
             status: 'completed', // New sessions are completed when generated
             objectives: selectedObjectives.map(obj => ({ custom: obj })),
-            interventions: selectedInterventions.map(int => ({ custom: int }))
           })
         });
         
@@ -181,19 +241,31 @@ interface SessionTemplate {
   
   const copyToClipboard = () => {
     navigator.clipboard.writeText(generatedNote);
-    alert('Note copied to clipboard!');
+    setNotification({
+      isOpen: true,
+      message: 'Note copied to clipboard!',
+      type: 'success'
+    });
   };
 
   const exportSession = async (format: 'pdf' | 'docx' | 'txt') => {
     if (!lastSessionId) {
-      alert('Session not saved. Cannot export.');
+      setNotification({
+        isOpen: true,
+        message: 'Session not saved. Cannot export.',
+        type: 'error'
+      });
       return;
     }
 
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        alert('Authentication required');
+        setNotification({
+          isOpen: true,
+          message: 'Authentication required',
+          type: 'error'
+        });
         return;
       }
 
@@ -231,7 +303,11 @@ interface SessionTemplate {
       
     } catch (error) {
       console.error('Export error:', error);
-      alert('Export failed. Please try again.');
+        setNotification({
+          isOpen: true,
+          message: 'Export failed. Please try again.',
+          type: 'error'
+        });
     }
   };
   
@@ -246,66 +322,6 @@ interface SessionTemplate {
           </div>
         )}
 
-        {/* Template Selection */}
-        {templates.length > 0 && (
-          <div>
-            <div className="flex justify-between items-center">
-              <label className={styles.label}>Session Template (Optional)</label>
-              <button
-                type="button"
-                onClick={() => {
-                  // Reload templates
-                  const loadTemplates = async () => {
-                    try {
-                      const token = localStorage.getItem('token');
-                      if (!token) return;
-
-                      const response = await fetch('/api/templates', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                      });
-
-                      if (response.ok) {
-                        const result = await response.json();
-                        if (result.success && result.data) {
-                          setTemplates(result.data);
-                          console.log('Templates reloaded:', result.data.length);
-                        }
-                      }
-                    } catch (error) {
-                      console.warn('Failed to reload templates:', error);
-                    }
-                  };
-                  loadTemplates();
-                }}
-                className="text-xs text-blue-600 hover:underline"
-              >
-                🔄 Reload Templates
-              </button>
-            </div>
-            <select
-              value={selectedTemplate}
-              onChange={(e) => handleTemplateChange(e.target.value)}
-              className={styles.select}
-            >
-              <option value="">Choose a template to pre-fill form...</option>
-              {templates.map(template => (
-                <option key={template.id} value={template.id}>
-                  {template.name} {template.defaultDuration && `(${template.defaultDuration} min)`}
-                </option>
-              ))}
-            </select>
-            {selectedTemplate && (
-              <div className="bg-blue-50 border border-blue-200 rounded p-3 mt-2">
-                <p className="text-sm text-blue-800 font-medium">
-                  ✅ Template Applied: {templates.find(t => t.id === selectedTemplate)?.name}
-                </p>
-                <p className="text-xs text-blue-600 mt-1">
-                  Duration, location, objectives, and interventions have been pre-filled.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
         
         {/* Client Selection */}
         <div>
@@ -360,23 +376,33 @@ interface SessionTemplate {
             required
             className={styles.select}
           >
-            <option value="15">15 minutes</option>
-            <option value="30">30 minutes</option>
-            <option value="45">45 minutes</option>
-            <option value="60">60 minutes</option>
-            <option value="90">90 minutes</option>
+            {[30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180].map(minutes => (
+              <option key={minutes} value={minutes.toString()}>
+                {minutes} minutes
+              </option>
+            ))}
           </select>
         </div>
         
         {/* Multi-select objectives */}
         <div>
           <label className={styles.label}>Goals/Objectives *</label>
+          {objectivesAutoPopulated && (
+            <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-2">
+              <p className="text-xs text-blue-800">
+                ✅ Objectives auto-populated from client profile. You can adjust as needed.
+              </p>
+            </div>
+          )}
           <MultiSelect 
             name="objectives"
             options={objectives.map(o => ({ value: o.name, label: o.name }))}
             placeholder="Search objectives..."
             value={selectedObjectives}
-            onChange={setSelectedObjectives}
+            onChange={(selected) => {
+              setSelectedObjectives(selected);
+              setObjectivesAutoPopulated(false); // User manually changed, no longer auto-populated
+            }}
           />
           {objectives.length === 0 && (
             <p className="text-sm text-gray-600 mt-1">
@@ -385,19 +411,23 @@ interface SessionTemplate {
           )}
         </div>
         
-        {/* Multi-select interventions */}
+        {/* Treatment Plan */}
         <div>
-          <label className={styles.label}>Interventions Used *</label>
-          <MultiSelect 
-            name="interventions"
-            options={interventions.map(i => ({ value: i.name, label: i.name }))}
-            placeholder="Search interventions..."
-            value={selectedInterventions}
-            onChange={setSelectedInterventions}
+          <label className={styles.label}>Treatment Plan</label>
+          <p className="text-xs text-gray-600 mb-2">
+            Treatment plan is auto-populated from client profile. You can edit it here and changes will be saved to the client profile when you generate the note.
+          </p>
+          <textarea 
+            name="treatmentPlan"
+            value={treatmentPlanText}
+            onChange={(e) => setTreatmentPlanText(e.target.value)}
+            className={`${styles.input} resize-none`}
+            rows={8}
+            placeholder="Treatment plan will appear here when client is selected. Edit to update client profile."
           />
-          {interventions.length === 0 && (
-            <p className="text-sm text-gray-600 mt-1">
-              Loading interventions... If this persists, contact your administrator.
+          {treatmentPlanText && (
+            <p className="text-xs text-blue-600 mt-1">
+              💡 Changes will be saved to client profile when you generate the note.
             </p>
           )}
         </div>
@@ -418,14 +448,14 @@ interface SessionTemplate {
           <button 
             type="button"
             onClick={() => {
-              setSelectedTemplate('');
               setSelectedClientId('');
               setSelectedLocation('');
               setSelectedDuration('60');
               setSelectedObjectives([]);
-              setSelectedInterventions([]);
+              setTreatmentPlanText('');
               setGeneratedNote('');
               setLastSessionId(null);
+              setObjectivesAutoPopulated(false);
             }}
             className={styles.button.secondary}
           >
@@ -500,6 +530,14 @@ interface SessionTemplate {
           </div>
         </div>
       )}
+      
+      {/* Notification */}
+      <ToastNotification
+        isOpen={notification.isOpen}
+        message={notification.message}
+        type={notification.type}
+        onClose={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

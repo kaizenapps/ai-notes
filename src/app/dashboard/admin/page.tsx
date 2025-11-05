@@ -7,9 +7,11 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { styles } from '@/lib/styles';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
-import { Client as ClientType } from '@/types';
-import { TemplateManager } from '@/components/admin/TemplateManager';
+import { Client as ClientType, User } from '@/types';
 import { UserManager } from '@/components/admin/UserManager';
+import { MultiSelect } from '@/components/ui/MultiSelect';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ToastNotification } from '@/components/ui/Notification';
 import Link from 'next/link';
 
 interface LookupItem {
@@ -21,27 +23,11 @@ interface LookupItem {
   [key: string]: unknown;
 }
 
-interface SessionTemplate {
-  id: string;
-  name: string;
-  description?: string;
-  defaultDuration?: number;
-  defaultLocationId?: string;
-  defaultLocationName?: string;
-  templateObjectives: string[];
-  templateInterventions: string[];
-  createdBy?: string;
-  isActive: boolean;
-  createdAt: Date;
-  [key: string]: unknown;
-}
 
 interface LookupData {
   locations: LookupItem[];
   objectives: LookupItem[];
-  interventions: LookupItem[];
   clients: Client[];
-  templates: SessionTemplate[];
   users: never[]; // Users are handled by UserManager component
 }
 
@@ -57,12 +43,11 @@ export default function AdminPage() {
   const [lookupData, setLookupData] = useState<LookupData>({
     locations: [],
     objectives: [],
-    interventions: [],
     clients: [],
-    templates: [],
     users: []
   });
-  const [activeTab, setActiveTab] = useState<'locations' | 'objectives' | 'interventions' | 'clients' | 'templates' | 'users'>('locations');
+  const [userCount, setUserCount] = useState(0);
+  const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'objectives' | 'locations'>('users');
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState<LookupItem | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -74,15 +59,36 @@ export default function AdminPage() {
   const [clientFormData, setClientFormData] = useState({
     firstName: '',
     lastInitial: '',
-    treatmentPlan: ''
+    treatmentPlan: '',
+    objectivesSelected: [] as string[]
   });
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+  const [notification, setNotification] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    message: '',
+    type: 'info'
+  });
 
   useSessionTimeout();
 
   // Define columns for each tab
-  const getColumnsForTab = (tab: string): Column<LookupItem | Client | SessionTemplate>[] => {
+  const getColumnsForTab = (tab: string): Column<LookupItem | Client>[] => {
     switch (tab) {
       case 'locations':
         return [
@@ -96,7 +102,10 @@ export default function AdminPage() {
             key: 'description',
             label: 'Description',
             sortable: true,
-            render: (value) => <span className="text-gray-600">{String(value) || '-'}</span>
+            render: (value) => {
+              const displayValue = value && value !== 'undefined' && value !== 'null' ? String(value) : '';
+              return <span className="text-gray-600">{displayValue || '-'}</span>;
+            }
           }
         ];
       case 'objectives':
@@ -111,34 +120,19 @@ export default function AdminPage() {
             key: 'category',
             label: 'Category',
             sortable: true,
-            render: (value) => <span className="text-gray-600">{String(value) || '-'}</span>
+            render: (value) => {
+              const displayValue = value && value !== 'undefined' && value !== 'null' ? String(value) : '';
+              return <span className="text-gray-600">{displayValue || '-'}</span>;
+            }
           },
           {
             key: 'description',
             label: 'Description',
             sortable: true,
-            render: (value) => <span className="text-gray-600">{String(value) || '-'}</span>
-          }
-        ];
-      case 'interventions':
-        return [
-          {
-            key: 'name',
-            label: 'Intervention',
-            sortable: true,
-            render: (value) => <span className="font-medium text-gray-900">{String(value)}</span>
-          },
-          {
-            key: 'category',
-            label: 'Category',
-            sortable: true,
-            render: (value) => <span className="text-gray-600">{String(value) || '-'}</span>
-          },
-          {
-            key: 'description',
-            label: 'Description',
-            sortable: true,
-            render: (value) => <span className="text-gray-600">{String(value) || '-'}</span>
+            render: (value) => {
+              const displayValue = value && value !== 'undefined' && value !== 'null' ? String(value) : '';
+              return <span className="text-gray-600">{displayValue || '-'}</span>;
+            }
           }
         ];
       case 'clients':
@@ -218,11 +212,26 @@ export default function AdminPage() {
           setLookupData(prev => ({ ...prev, clients: clientsResponse.data }));
         }
 
-        // Load templates data
-        const templatesResponse = await apiGet<{ success: boolean; data: SessionTemplate[] }>('/templates');
-        if (templatesResponse.success && templatesResponse.data) {
-          setLookupData(prev => ({ ...prev, templates: templatesResponse.data }));
+        // Load users count for tab display
+        try {
+          const usersResponse = await apiGet<{ success: boolean; data: Array<{
+            id: string;
+            username: string;
+            email?: string;
+            role: 'peer_support' | 'admin';
+            firstName?: string;
+            lastName?: string;
+            isActive: boolean;
+            lastLoginAt?: Date;
+            createdAt: Date;
+          }> }>('/admin/users');
+          if (usersResponse.success && usersResponse.data) {
+            setUserCount(usersResponse.data.length);
+          }
+        } catch (error) {
+          console.error('Error loading users count:', error);
         }
+
       } catch (error) {
         console.error('Error loading admin data:', error);
         setError('Failed to load admin data');
@@ -241,7 +250,7 @@ export default function AdminPage() {
     window.location.href = '/';
   };
 
-  const openForm = (item?: LookupItem | Client | SessionTemplate) => {
+  const openForm = (item?: LookupItem | Client) => {
     if (activeTab === 'clients') {
       const client = item as Client;
       if (client) {
@@ -249,19 +258,18 @@ export default function AdminPage() {
         setClientFormData({
           firstName: client.firstName,
           lastInitial: client.lastInitial,
-          treatmentPlan: client.treatmentPlan || ''
+          treatmentPlan: client.treatmentPlan || '',
+          objectivesSelected: client.objectivesSelected || []
         });
       } else {
         setEditingClient(null);
         setClientFormData({
           firstName: '',
           lastInitial: '',
-          treatmentPlan: ''
+          treatmentPlan: '',
+          objectivesSelected: []
         });
       }
-    } else if (activeTab === 'templates') {
-      // Templates are handled by TemplateManager component - no form needed here
-      return;
     } else {
       const lookupItem = item as LookupItem;
       if (lookupItem) {
@@ -289,7 +297,7 @@ export default function AdminPage() {
     setEditingItem(null);
     setEditingClient(null);
     setFormData({ name: '', category: '', description: '' });
-    setClientFormData({ firstName: '', lastInitial: '', treatmentPlan: '' });
+    setClientFormData({ firstName: '', lastInitial: '', treatmentPlan: '', objectivesSelected: [] });
     setFormError('');
   };
 
@@ -316,7 +324,8 @@ export default function AdminPage() {
         const clientData = {
           firstName: clientFormData.firstName.trim(),
           lastInitial: clientFormData.lastInitial.trim().toUpperCase(),
-          treatmentPlan: clientFormData.treatmentPlan.trim()
+          treatmentPlan: clientFormData.treatmentPlan.trim(),
+          objectivesSelected: clientFormData.objectivesSelected
         };
 
         let response;
@@ -339,11 +348,6 @@ export default function AdminPage() {
         } else {
           setFormError('Failed to save client');
         }
-      } else if (activeTab === 'templates') {
-        // Templates are handled by TemplateManager component
-        setFormError('Template management is handled separately');
-        closeForm();
-        return;
       } else {
         // Handle lookup item form submission
         if (!formData.name.trim()) {
@@ -392,35 +396,60 @@ export default function AdminPage() {
 
   const handleDelete = async (item: LookupItem | Client) => {
     const name = 'name' in item ? item.name : `${item.firstName} ${item.lastInitial}.`;
-    if (!confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      let response;
-      if (activeTab === 'clients') {
-        response = await apiDelete<{ success: boolean }>(`/clients/${item.id}`);
-      } else {
-        response = await apiDelete<{ success: boolean }>(`/admin/${activeTab}/${item.id}`);
-      }
-      
-      if (response.success) {
-        setLookupData(prev => ({
-          ...prev,
-          [activeTab]: prev[activeTab].filter(i => i.id !== item.id)
-        }));
+    
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Confirm Delete',
+      message: `Are you sure you want to delete "${name}"? This action cannot be undone.`,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
         
-        // Refresh app context lookup data if not clients
-        if (activeTab !== 'clients') {
-          await loadLookupData();
+        try {
+          let response;
+          if (activeTab === 'clients') {
+            response = await apiDelete<{ success: boolean }>(`/clients/${item.id}`);
+          } else {
+            response = await apiDelete<{ success: boolean }>(`/admin/${activeTab}/${item.id}`);
+          }
+          
+          if (response.success) {
+            setLookupData(prev => ({
+              ...prev,
+              [activeTab]: prev[activeTab].filter(i => i.id !== item.id)
+            }));
+            
+            // Refresh app context lookup data if not clients
+            if (activeTab !== 'clients') {
+              await loadLookupData();
+            }
+            
+            // Update user count if deleting from users tab
+            if (activeTab === 'users') {
+              setUserCount(prev => Math.max(0, prev - 1));
+            }
+            
+            setNotification({
+              isOpen: true,
+              message: 'Item deleted successfully',
+              type: 'success'
+            });
+          } else {
+            setNotification({
+              isOpen: true,
+              message: 'Failed to delete item',
+              type: 'error'
+            });
+          }
+        } catch (error) {
+          console.error('Error deleting item:', error);
+          setNotification({
+            isOpen: true,
+            message: 'Failed to delete item. Please try again.',
+            type: 'error'
+          });
         }
-      } else {
-        alert('Failed to delete item');
       }
-    } catch (error) {
-      console.error('Error deleting item:', error);
-      alert('Failed to delete item. Please try again.');
-    }
+    });
   };
 
   if (loading) {
@@ -459,12 +488,10 @@ export default function AdminPage() {
 
   const currentData = lookupData[activeTab];
   const tabLabels = {
-    locations: 'Session Locations',
-    objectives: 'Treatment Objectives', 
-    interventions: 'Peer Support Interventions',
+    users: 'User Management',
     clients: 'Client Management',
-    templates: 'Session Templates',
-    users: 'User Management'
+    objectives: 'Goals and Objectives',
+    locations: 'Session Locations'
   };
 
   return (
@@ -497,30 +524,36 @@ export default function AdminPage() {
           <div className="mb-6">
             <div className="border-b border-gray-200">
               <nav className="-mb-px flex space-x-8">
-                {Object.entries(tabLabels).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setActiveTab(key as keyof LookupData)}
-                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                      activeTab === key
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    {label} ({currentData.length})
-                  </button>
-                ))}
+                {Object.entries(tabLabels).map(([key, label]) => {
+                  // For users tab, use the separate userCount state
+                  // For other tabs, use lookupData
+                  const count = key === 'users' 
+                    ? userCount 
+                    : (Array.isArray(lookupData[key as keyof LookupData]) 
+                        ? lookupData[key as keyof LookupData].length 
+                        : 0);
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setActiveTab(key as keyof LookupData)}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        activeTab === key
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      {label} ({count})
+                    </button>
+                  );
+                })}
               </nav>
             </div>
           </div>
 
           {/* Action Bar (hidden for tabs that render their own headings) */}
-          {activeTab !== 'templates' && activeTab !== 'users' ? (
+          {activeTab !== 'users' ? (
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {tabLabels[activeTab]}
-                </h2>
                 <p className="text-sm text-gray-600">
                   Manage {activeTab} used in session forms
                 </p>
@@ -537,13 +570,7 @@ export default function AdminPage() {
           )}
 
           {/* Content Area */}
-          {activeTab === 'templates' ? (
-            <TemplateManager 
-              locations={lookupData.locations}
-              objectives={lookupData.objectives}
-              interventions={lookupData.interventions}
-            />
-          ) : activeTab === 'users' ? (
+          {activeTab === 'users' ? (
             <UserManager />
           ) : currentData.length === 0 ? (
             <div className={`${styles.card} text-center py-12`}>
@@ -592,9 +619,9 @@ export default function AdminPage() {
 
       {/* Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="p-6">
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={closeForm}>
+          <div className={`bg-white rounded-lg shadow-2xl w-full ${activeTab === 'clients' ? 'max-w-2xl' : 'max-w-md'} max-h-[95vh] flex flex-col`} onClick={(e) => e.stopPropagation()}>
+            <div className="flex-shrink-0 p-6 border-b border-gray-200">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">
                   {activeTab === 'clients' 
@@ -604,15 +631,18 @@ export default function AdminPage() {
                 </h3>
                 <button
                   onClick={closeForm}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors duration-200 p-1 rounded hover:bg-gray-100"
+                  aria-label="Close"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
+            </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="flex-1 overflow-y-auto p-6">
+              <form onSubmit={handleSubmit} className="space-y-5">
                 {formError && (
                   <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
                     {formError}
@@ -656,8 +686,30 @@ export default function AdminPage() {
                         onChange={(e) => setClientFormData(prev => ({ ...prev, treatmentPlan: e.target.value }))}
                         className={`${styles.input} resize-none`}
                         rows={4}
-                        placeholder="Enter treatment plan or goals..."
+                        placeholder={`Paste treatment plan here. Recommended format:
+Long-term Goal 1: [description]
+Short-term Goal 1: [description]
+Intervention 1: [category] - [description]`}
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Use the standardized format for best AI parsing results
+                      </p>
+                    </div>
+
+                    <div className="relative">
+                      <label className={styles.label}>Goals & Objectives *</label>
+                      <p className="text-xs text-gray-600 mb-2">
+                        Select the objectives that apply to this client. These will be pre-populated for all future sessions.
+                      </p>
+                      <div className="relative z-10">
+                        <MultiSelect
+                          name="objectivesSelected"
+                          options={lookupData.objectives.map(obj => ({ value: obj.id, label: obj.name }))}
+                          placeholder="Select objectives for this client..."
+                          value={clientFormData.objectivesSelected}
+                          onChange={(selected) => setClientFormData(prev => ({ ...prev, objectivesSelected: selected }))}
+                        />
+                      </div>
                     </div>
                   </>
                 ) : (
@@ -700,7 +752,7 @@ export default function AdminPage() {
                   </>
                 )}
 
-                <div className="flex gap-3 pt-4">
+                <div className="flex gap-3 pt-4 border-t border-gray-200 mt-6">
                   <button
                     type="button"
                     onClick={closeForm}
@@ -731,6 +783,26 @@ export default function AdminPage() {
           <p>Admin Dashboard • HIPAA Compliant • Session timeout: 15 minutes</p>
         </div>
       </footer>
+      
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
+      
+      {/* Notification */}
+      <ToastNotification
+        isOpen={notification.isOpen}
+        message={notification.message}
+        type={notification.type}
+        onClose={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

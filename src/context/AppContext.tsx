@@ -18,7 +18,6 @@ interface AppContextType {
   setClients: (clients: Client[]) => void;
   locations: LookupItem[];
   objectives: LookupItem[];
-  interventions: LookupItem[];
   loadLookupData: () => Promise<void>;
   resetTimeout: () => void;
 }
@@ -30,7 +29,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [locations, setLocations] = useState<LookupItem[]>([]);
   const [objectives, setObjectives] = useState<LookupItem[]>([]);
-  const [interventions, setInterventions] = useState<LookupItem[]>([]);
   const sessionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Load lookup data from API
@@ -44,14 +42,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         data: { 
           locations: LookupItem[]; 
           objectives: LookupItem[]; 
-          interventions: LookupItem[]; 
         } 
       }>('/lookup');
       
       if (response.success && response.data) {
         setLocations(response.data.locations);
         setObjectives(response.data.objectives);
-        setInterventions(response.data.interventions);
       }
     } catch (error) {
       console.warn('Failed to load lookup data, using fallbacks:', error);
@@ -66,11 +62,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         { id: '1', name: 'Improve coping skills' },
         { id: '2', name: 'Manage anxiety symptoms' },
         { id: '3', name: 'Build self-esteem' }
-      ]);
-      setInterventions([
-        { id: '1', name: 'Active Listening' },
-        { id: '2', name: 'Peer Mentoring' },
-        { id: '3', name: 'Crisis Support' }
       ]);
     }
   }, []);
@@ -111,7 +102,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clients, setClients,
       locations,
       objectives,
-      interventions,
       loadLookupData,
       resetTimeout 
     }}>

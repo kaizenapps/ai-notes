@@ -57,7 +57,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const location = await withDatabase(async (client) => {
       const result = await client.query(
         `UPDATE session_locations 
-         SET name = $1, description = $2, updated_at = CURRENT_TIMESTAMP
+         SET name = $1, description = $2
          WHERE id = $3
          RETURNING id, name, description, is_active`,
         [name.trim(), description?.trim() || null, params.id]

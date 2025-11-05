@@ -5,6 +5,8 @@ import { useApp } from '@/context/AppContext';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { SessionCard } from '@/components/ui/SessionCard';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ToastNotification } from '@/components/ui/Notification';
 import { styles } from '@/lib/styles';
 import { SessionNote } from '@/types';
 import { apiGet } from '@/lib/api';
@@ -42,6 +44,26 @@ function HistoryPageContent() {
   });
   const [editFormLoading, setEditFormLoading] = useState(false);
   const [editFormError, setEditFormError] = useState('');
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+  const [notification, setNotification] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    message: '',
+    type: 'info'
+  });
   const searchParams = useSearchParams();
   
   useSessionTimeout();
@@ -118,7 +140,6 @@ function HistoryPageContent() {
                 duration: 60,
                 location: 'Telehealth',
                 objectives: ['Improve coping skills', 'Manage anxiety symptoms'],
-                interventions: ['Active Listening', 'Cognitive Restructuring'],
                 generatedNote: 'Client engaged well in today\'s session. We focused on developing coping strategies for managing anxiety in daily situations.',
                 createdAt: new Date(Date.now() - 86400000),
                 client_name: 'John D.',
@@ -132,7 +153,6 @@ function HistoryPageContent() {
                 duration: 45,
                 location: 'Office',
                 objectives: ['Build self-esteem', 'Enhance communication skills'],
-                interventions: ['Empowerment Coaching', 'Goal Setting'],
                 generatedNote: 'Session focused on building client\'s confidence and improving communication patterns with family members.',
                 createdAt: new Date(Date.now() - 172800000),
                 client_name: 'Jane S.',
@@ -307,35 +327,56 @@ function HistoryPageContent() {
   };
 
   const handleDeleteSession = async (sessionId: string) => {
-    if (!confirm('Are you sure you want to archive this session? This action cannot be undone.')) {
-      return;
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Archive Session',
+      message: 'Are you sure you want to archive this session? This action cannot be undone.',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        
+        try {
+          const response = await fetch(`/api/sessions/${sessionId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
 
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+              // Remove session from list
+              setSessions(prev => prev.filter(session => session.id !== sessionId));
+              setNotification({
+                isOpen: true,
+                message: 'Session archived successfully',
+                type: 'success'
+              });
+            } else {
+              setNotification({
+                isOpen: true,
+                message: 'Failed to archive session',
+                type: 'error'
+              });
+            }
+          } else {
+            const result = await response.json();
+            setNotification({
+              isOpen: true,
+              message: result.error || 'Failed to archive session',
+              type: 'error'
+            });
+          }
+        } catch (error) {
+          console.error('Error archiving session:', error);
+          setNotification({
+            isOpen: true,
+            message: 'Failed to archive session. Please try again.',
+            type: 'error'
+          });
         }
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          // Remove session from list
-          setSessions(prev => prev.filter(session => session.id !== sessionId));
-          alert('Session archived successfully');
-        } else {
-          alert('Failed to archive session');
-        }
-      } else {
-        const result = await response.json();
-        alert(result.error || 'Failed to archive session');
       }
-    } catch (error) {
-      console.error('Error archiving session:', error);
-      alert('Failed to archive session. Please try again.');
-    }
+    });
   };
 
   const handleQuickStatusChange = async (sessionId: string, newStatus: 'draft' | 'completed' | 'archived') => {
@@ -361,11 +402,19 @@ function HistoryPageContent() {
         }
       } else {
         const result = await response.json();
-        alert(result.error || 'Failed to update status');
+        setNotification({
+          isOpen: true,
+          message: result.error || 'Failed to update status',
+          type: 'error'
+        });
       }
     } catch (error) {
       console.error('Error updating status:', error);
-      alert('Failed to update status. Please try again.');
+      setNotification({
+        isOpen: true,
+        message: 'Failed to update status. Please try again.',
+        type: 'error'
+      });
     }
   };
   
@@ -535,7 +584,6 @@ function HistoryPageContent() {
                     session.client_name?.toLowerCase().includes(searchLower) ||
                     session.generatedNote.toLowerCase().includes(searchLower) ||
                     session.objectives.some(obj => obj.toLowerCase().includes(searchLower)) ||
-                    session.interventions.some(int => int.toLowerCase().includes(searchLower)) ||
                     session.feedback?.toLowerCase().includes(searchLower)
                   );
                 })
@@ -570,8 +618,8 @@ function HistoryPageContent() {
       
       {/* Edit Session Modal */}
       {showEditForm && editingSession && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={closeEditForm}>
+          <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">
@@ -579,7 +627,8 @@ function HistoryPageContent() {
                 </h3>
                 <button
                   onClick={closeEditForm}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors duration-200 p-1 rounded hover:bg-gray-100"
+                  aria-label="Close"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -705,6 +754,26 @@ function HistoryPageContent() {
           <p>HIPAA Compliant • Session timeout: 15 minutes</p>
         </div>
       </footer>
+      
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText="Archive"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
+      
+      {/* Notification */}
+      <ToastNotification
+        isOpen={notification.isOpen}
+        message={notification.message}
+        type={notification.type}
+        onClose={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

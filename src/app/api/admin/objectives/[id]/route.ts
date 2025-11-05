@@ -58,7 +58,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const objective = await withDatabase(async (client) => {
       const result = await client.query(
         `UPDATE treatment_objectives 
-         SET name = $1, category = $2, description = $3, updated_at = CURRENT_TIMESTAMP
+         SET name = $1, category = $2, description = $3
          WHERE id = $4
          RETURNING id, name, category, description, is_active`,
         [name.trim(), category?.trim() || null, description?.trim() || null, params.id]

@@ -1,5 +1,6 @@
 # Multi-stage build for production optimization
-FROM node:18-alpine AS base
+# Using Node 20 for better Next.js 15 compatibility
+FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps

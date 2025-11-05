@@ -92,14 +92,13 @@ Thumbs.db
 .gitignore
 
 # Docker
-Dockerfile*
-docker-compose*
-.dockerignore
+# Note: Keep Dockerfile and docker-compose.yml for reference, but exclude them from build context
+# Dockerfile and docker-compose.yml are needed for Docker, but not inside the container
 
-# Documentation
-README.md
-DEPLOYMENT.md
-*.md
+# Documentation (exclude from build, but keep for reference)
+# README.md
+# DEPLOYMENT.md
+# *.md
 
 # Backup files
 backup_*

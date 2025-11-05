@@ -20,6 +20,19 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Invalid request data' }, { status: 400 });
   }
   
+  // Validate required fields
+  if (!data.location || data.location.trim() === '') {
+    return Response.json({ error: 'Location is required' }, { status: 400 });
+  }
+  
+  if (!data.duration || data.duration.trim() === '') {
+    return Response.json({ error: 'Duration is required' }, { status: 400 });
+  }
+  
+  if (!data.objectives || !Array.isArray(data.objectives) || data.objectives.length === 0) {
+    return Response.json({ error: 'At least one objective is required' }, { status: 400 });
+  }
+  
   try {
     if (!process.env.OPENAI_API_KEY) {
       return Response.json({ error: 'OpenAI API key not configured' }, { status: 500 });
@@ -33,12 +46,12 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "system",
-          content: "You are a peer support specialist creating session notes. Never use therapist terms, never include last names, focus on peer support interventions."
+          content: "You are a professional peer support specialist documenting peer support sessions. Your documentation must: 1) Use peer support language exclusively (never clinical/therapeutic terms), 2) Never include last names or full names (HIPAA compliance), 3) Focus on mutual support, shared experiences, and peer-to-peer interventions, 4) Be factual, specific, and professional, 5) Avoid diagnoses or clinical assessments. Always follow the exact output format specified in the user's instructions."
         },
         { role: "user", content: prompt }
       ],
       temperature: parseFloat(process.env.OPENAI_TEMPERATURE || "0.7"),
-      max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || "1500"),
+      max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || "2000"), // Increased for more detailed notes
     });
     
     const note = completion.choices[0].message.content || '';
@@ -57,47 +70,98 @@ interface SessionData {
   location: string;
   duration: string;
   objectives: string[];
-  interventions: string[];
   feedback?: string;
+  treatmentPlan?: string;
 }
 
 function buildPrompt(data: SessionData): string {
-  const extra = data.feedback && data.feedback.trim().length > 0 ? `\n- Additional Notes: ${data.feedback.trim()}` : '';
-  return `You are a peer support specialist creating session documentation. Use peer-support language only, avoid therapist terminology, and never include last names.
+  // Build additional notes section
+  const additionalNotesSection = data.feedback && data.feedback.trim().length > 0 
+    ? `\n\nADDITIONAL NOTES FROM SESSION:\n${data.feedback.trim()}\n` 
+    : '';
+  
+  // Build treatment plan section with clear instructions
+  const treatmentPlanSection = data.treatmentPlan && data.treatmentPlan.trim().length > 0 
+    ? `\n\nCLIENT TREATMENT PLAN:\n${data.treatmentPlan.trim()}\n` 
+    : '';
+  
+  // Calculate time breakdown points
+  const duration = parseInt(data.duration);
+  const timePoints = {
+    start: 0,
+    mid1: Math.floor(duration * 0.25),
+    mid2: Math.floor(duration * 0.5),
+    mid3: Math.floor(duration * 0.75),
+    end: duration
+  };
+  
+  return `You are a peer support specialist creating professional session documentation. Your role is to document peer support sessions accurately and in compliance with HIPAA guidelines.
 
-Input Data:
+CRITICAL COMPLIANCE REQUIREMENTS:
+- Use PEER SUPPORT language only (never use therapist, clinical, or medical terminology)
+- Never include last names or full names (only first name or initials)
+- Focus on peer support interventions, shared experiences, and mutual support
+- Avoid diagnoses, clinical assessments, or medical judgments
+- Use language like "peer support", "mutual support", "shared experiences" instead of "therapy" or "treatment"
+
+SESSION INFORMATION:
 - Location: ${data.location}
-- Duration: ${data.duration} minutes
-- Objectives: ${data.objectives.join(', ')}
-${extra}
+- Duration: ${duration} minutes
+- Session Objectives: ${data.objectives.join(', ')}
+${treatmentPlanSection}${additionalNotesSection}
 
-Instructions:
-- Incorporate the Additional Notes content faithfully.
-- Be concise, factual, and avoid diagnoses or clinical judgments.
-- Do not invent details beyond the inputs.
+INSTRUCTIONS FOR NOTE GENERATION:
 
-Output strictly in this structure with headings exactly as written (no extra headings):
+1. TREATMENT PLAN USAGE:
+${data.treatmentPlan && data.treatmentPlan.trim().length > 0 
+  ? `   - Extract and reference relevant goals, objectives, and interventions from the treatment plan
+   - Align session activities with the treatment plan objectives listed above
+   - Use specific interventions mentioned in the treatment plan when describing peer support activities
+   - Connect session outcomes to treatment plan goals`
+  : `   - Focus on the session objectives provided above
+   - Use general peer support approaches aligned with the client's stated goals`}
+
+2. ADDITIONAL NOTES:
+${data.feedback && data.feedback.trim().length > 0 
+  ? `   - Incorporate the additional notes provided above into the appropriate sections
+   - Use the notes to add specific details about client responses, activities, and observations`
+  : `   - Create appropriate content based on the session objectives and treatment plan`}
+
+3. TIME-BASED ACTIVITIES BREAKDOWN:
+   - Break down the ${duration}-minute session into logical time segments
+   - Suggested breakdown: Opening (0-${timePoints.mid1} min), Main Activities (${timePoints.mid1}-${timePoints.mid3} min), Closing (${timePoints.mid3}-${duration} min)
+   - Adjust time segments based on the actual duration and activities described
+
+4. CONTENT GUIDELINES:
+   - Be factual, specific, and professional
+   - Use peer support terminology (e.g., "peer support specialist", "mutual support", "shared experiences")
+   - Include concrete examples and observations from the session
+   - Connect activities to the stated objectives
+   - Keep each section focused and relevant
+
+OUTPUT FORMAT - Use EXACTLY these headings (no markdown, no bold, just plain text):
+IMPORTANT: Include line breaks (newlines) between each section for proper formatting. Each section should be separated by a blank line.
+
 Location of Meeting:
+[Provide the location where the session took place]
+
 Focus of the Meeting:
+[Describe the primary focus based on the session objectives. Reference relevant treatment plan goals if applicable. Be specific about what was addressed in this session.]
+
 Activities (time-based breakdown):
+[Break down activities by time segments. Include:
+- Opening/check-in period
+- Main activities aligned with objectives
+- Closing/summary period
+Use specific time ranges based on the ${duration}-minute duration. Include line breaks between each time segment.]
+
 Peer Support Interventions:
+[Describe the specific peer support interventions used. Reference interventions from the treatment plan if provided. Use peer support language - avoid clinical terms. Examples: active listening, shared experiences, mutual support, goal-setting, resource sharing, peer mentoring, etc.]
+
 Patient Response/Content:
-Plan for Next Session:`;
+[Describe how the client engaged with the session, their responses, participation level, any insights shared, progress observed, and their feedback. Use only first name or initials. Be specific and factual.]
+
+Plan for Next Session:
+[Based on the session objectives and treatment plan, outline what should be addressed in the next session. Reference treatment plan goals if applicable. Keep it focused and actionable.]`;
 }
 
-function generateMockNote(data: SessionData): string {
-  return `**Location of Meeting:** ${data.location}
-
-**Focus of the meeting:** The session focused on ${data.objectives.join(', ').toLowerCase()} through peer support interventions.
-
-**Activities:**
-- 0-10 minutes: Welcome and check-in, established rapport
-- 10-${Math.floor(parseInt(data.duration) * 0.7)} minutes: Engaged in ${data.interventions.join(' and ').toLowerCase()}
-- ${Math.floor(parseInt(data.duration) * 0.7)}-${data.duration} minutes: Summary and planning for next session
-
-**Peer Support Interventions:** ${data.interventions.join(', ')}
-
-**Patient Response/Content:** Client was engaged throughout the session and demonstrated understanding of the discussed concepts. Client expressed willingness to continue working on identified goals.
-
-**Plan for next session:** Continue working on ${data.objectives.join(' and ').toLowerCase()}. Schedule follow-up within one week to maintain momentum and support progress.`;
-}

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { styles } from '@/lib/styles';
 import { apiGet, apiPost, apiPut } from '@/lib/api';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ToastNotification } from '@/components/ui/Notification';
 
 interface User {
   id: string;
@@ -37,6 +39,26 @@ export function UserManager() {
   });
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+  const [notification, setNotification] = useState<{
+    isOpen: boolean;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    message: '',
+    type: 'info'
+  });
 
   useEffect(() => {
     loadUsers();
@@ -199,7 +221,11 @@ export function UserManager() {
         const result = await response.json();
         if (result.success) {
           closePasswordReset();
-          alert('Password reset successfully');
+          setNotification({
+            isOpen: true,
+            message: 'Password reset successfully',
+            type: 'success'
+          });
         } else {
           setFormError(result.error || 'Failed to reset password');
         }
@@ -217,24 +243,43 @@ export function UserManager() {
 
   const handleToggleActive = async (user: User) => {
     const action = user.isActive ? 'deactivate' : 'activate';
-    if (!confirm(`Are you sure you want to ${action} ${user.username}?`)) {
-      return;
-    }
+    
+    setConfirmDialog({
+      isOpen: true,
+      title: `Confirm ${action.charAt(0).toUpperCase() + action.slice(1)}`,
+      message: `Are you sure you want to ${action} ${user.username}?`,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        
+        try {
+          const response = await apiPut<{ success: boolean; data: User }>(`/admin/users/${user.id}`, {
+            isActive: !user.isActive
+          });
 
-    try {
-      const response = await apiPut<{ success: boolean; data: User }>(`/admin/users/${user.id}`, {
-        isActive: !user.isActive
-      });
-
-      if (response.success) {
-        await loadUsers();
-      } else {
-        alert(`Failed to ${action} user`);
+          if (response.success) {
+            await loadUsers();
+            setNotification({
+              isOpen: true,
+              message: `User ${action}d successfully`,
+              type: 'success'
+            });
+          } else {
+            setNotification({
+              isOpen: true,
+              message: `Failed to ${action} user`,
+              type: 'error'
+            });
+          }
+        } catch (error) {
+          console.error(`Error ${action}ing user:`, error);
+          setNotification({
+            isOpen: true,
+            message: `Failed to ${action} user. Please try again.`,
+            type: 'error'
+          });
+        }
       }
-    } catch (error) {
-      console.error(`Error ${action}ing user:`, error);
-      alert(`Failed to ${action} user. Please try again.`);
-    }
+    });
   };
 
   if (loading) {
@@ -246,9 +291,6 @@ export function UserManager() {
       {/* Action Bar */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">
-            User Management ({users.length})
-          </h3>
           <p className="text-sm text-gray-600">
             Manage system users and their access permissions
           </p>
@@ -366,8 +408,8 @@ export function UserManager() {
 
       {/* User Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={closeForm}>
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">
@@ -375,7 +417,8 @@ export function UserManager() {
                 </h3>
                 <button
                   onClick={closeForm}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors duration-200 p-1 rounded hover:bg-gray-100"
+                  aria-label="Close"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -499,8 +542,8 @@ export function UserManager() {
 
       {/* Password Reset Modal */}
       {showPasswordReset && resetPasswordUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={closePasswordReset}>
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">
@@ -576,6 +619,26 @@ export function UserManager() {
           </div>
         </div>
       )}
+      
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText="Confirm"
+        cancelText="Cancel"
+        confirmVariant="primary"
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
+      
+      {/* Notification */}
+      <ToastNotification
+        isOpen={notification.isOpen}
+        message={notification.message}
+        type={notification.type}
+        onClose={() => setNotification(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

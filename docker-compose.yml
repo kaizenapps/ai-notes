@@ -11,12 +11,12 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/database.sql:/docker-entrypoint-initdb.d/01-database.dump:ro
+      - ./database/database.sql:/docker-entrypoint-initdb.d/01-database.sql:ro
       - ./database/init-restore.sh:/docker-entrypoint-initdb.d/00-init-restore.sh:ro
     networks:
       - session-notes-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U session_user -d session_notes && [ -f /var/lib/postgresql/data/.restored_ok ] || exit 1"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U session_user -d session_notes"]
       interval: 10s
       timeout: 5s
       retries: 30

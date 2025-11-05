@@ -6,7 +6,6 @@ import { ApiResponse } from '@/types';
 interface LookupData {
   locations: Array<{ id: string; name: string }>;
   objectives: Array<{ id: string; name: string; category?: string }>;
-  interventions: Array<{ id: string; name: string; category?: string }>;
 }
 
 export async function GET(request: NextRequest) {
@@ -25,16 +24,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all lookup data
-    const [locations, objectives, interventions] = await Promise.all([
+    const [locations, objectives] = await Promise.all([
       lookupDb.getLocations(),
-      lookupDb.getObjectives(),
-      lookupDb.getInterventions()
+      lookupDb.getObjectives()
     ]);
 
     const lookupData: LookupData = {
       locations,
-      objectives,
-      interventions
+      objectives
     };
 
     const response: ApiResponse<LookupData> = {

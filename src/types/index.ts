@@ -10,6 +10,7 @@ export interface Client {
   firstName: string;
   lastInitial: string; // HIPAA: Only store initials
   treatmentPlan?: string;
+  objectivesSelected?: string[]; // Array of objective IDs selected for this client
 }
 
 export interface SessionNote {
@@ -20,7 +21,6 @@ export interface SessionNote {
   duration: number; // in minutes
   location: string;
   objectives: string[];
-  interventions: string[];
   generatedNote: string;
   feedback?: string;
   status?: 'draft' | 'completed' | 'archived';
@@ -32,9 +32,9 @@ export interface FormData {
   location: string;
   duration: string;
   objectives: string[];
-  interventions: string[];
   customGoal?: string;
   feedback?: string;
+  treatmentPlan?: string;
 }
 
 export interface ApiResponse<T> {

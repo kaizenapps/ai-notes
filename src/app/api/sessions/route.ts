@@ -97,8 +97,7 @@ export async function POST(request: NextRequest) {
       generatedNote,
       customFeedback,
       status,
-      objectives,
-      interventions
+      objectives
     } = body;
 
     // Validate required fields
@@ -111,12 +110,6 @@ export async function POST(request: NextRequest) {
     if (!objectives || !Array.isArray(objectives) || objectives.length === 0) {
       return Response.json({ 
         error: 'At least one objective is required' 
-      }, { status: 400 });
-    }
-
-    if (!interventions || !Array.isArray(interventions) || interventions.length === 0) {
-      return Response.json({ 
-        error: 'At least one intervention is required' 
       }, { status: 400 });
     }
 
@@ -134,10 +127,6 @@ export async function POST(request: NextRequest) {
       objectives: objectives.map((obj: { id?: string; custom?: string; name?: string }) => ({
         id: obj.id,
         custom: obj.custom || obj.name
-      })),
-      interventions: interventions.map((int: { id?: string; custom?: string; name?: string }) => ({
-        id: int.id,
-        custom: int.custom || int.name
       }))
     });
 

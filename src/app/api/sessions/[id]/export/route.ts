@@ -23,7 +23,6 @@ Date: ${date}
 Duration: ${session.duration} minutes
 Location: ${session.location}
 Objectives: ${session.objectives.join(', ')}
-Interventions: ${session.interventions.join(', ')}
 ${session.feedback ? `Additional Notes: ${session.feedback}` : ''}
 
 ---
@@ -122,7 +121,6 @@ HIPAA Compliant Export
         <div class="metadata-item"><span class="metadata-label">Duration:</span> ${session.duration} minutes</div>
         <div class="metadata-item"><span class="metadata-label">Location:</span> ${session.location}</div>
         <div class="metadata-item"><span class="metadata-label">Objectives:</span> ${session.objectives.join(', ')}</div>
-        <div class="metadata-item"><span class="metadata-label">Interventions:</span> ${session.interventions.join(', ')}</div>
         ${session.feedback ? `<div class="metadata-item"><span class="metadata-label">Additional Notes:</span> ${session.feedback}</div>` : ''}
     </div>
     ` : ''}
@@ -159,7 +157,7 @@ ${includeMetadata ? `
 Duration: ${session.duration} minutes\\par
 Location: ${session.location}\\par
 Objectives: ${session.objectives.join(', ')}\\par
-Interventions: ${session.interventions.join(', ')}\\par
+\\par
 ${session.feedback ? `Additional Notes: ${session.feedback}\\par` : ''}
 \\par
 

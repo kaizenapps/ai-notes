@@ -13,7 +13,6 @@ export interface SessionCardProps {
     duration: number;
     location: string;
     objectives: string[];
-    interventions: string[];
     generatedNote: string;
     feedback?: string;
     status: 'draft' | 'completed' | 'archived';
@@ -137,7 +136,7 @@ export function SessionCard({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 ml-4">
-            {onEdit && (
+            {onEdit && session.status !== 'archived' && (
               <button
                 onClick={() => onEdit(session)}
                 className="p-2 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
@@ -149,7 +148,7 @@ export function SessionCard({
               </button>
             )}
             
-            {onDelete && (
+            {onDelete && session.status !== 'archived' && (
               <button
                 onClick={() => onDelete(session.id)}
                 className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -204,33 +203,18 @@ export function SessionCard({
 
       {/* Content */}
       <div className="p-6">
-        {/* Objectives and Interventions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <h4 className="text-sm font-medium text-gray-900 mb-2">Objectives</h4>
-            <div className="flex flex-wrap gap-1">
-              {session.objectives.map((objective, index) => (
-                <span
-                  key={index}
-                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                >
-                  {objective}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h4 className="text-sm font-medium text-gray-900 mb-2">Interventions</h4>
-            <div className="flex flex-wrap gap-1">
-              {session.interventions.map((intervention, index) => (
-                <span
-                  key={index}
-                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
-                >
-                  {intervention}
-                </span>
-              ))}
-            </div>
+        {/* Objectives */}
+        <div className="mb-4">
+          <h4 className="text-sm font-medium text-gray-900 mb-2">Objectives</h4>
+          <div className="flex flex-wrap gap-1">
+            {session.objectives.map((objective, index) => (
+              <span
+                key={index}
+                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+              >
+                {objective}
+              </span>
+            ))}
           </div>
         </div>
 
@@ -238,11 +222,11 @@ export function SessionCard({
         <div className="mb-4">
           <h4 className="text-sm font-medium text-gray-900 mb-2">Session Notes</h4>
           <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm text-gray-700 leading-relaxed">
+            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
               {isExpanded || session.generatedNote.length <= 200
                 ? session.generatedNote
                 : `${session.generatedNote.substring(0, 200)}...`}
-            </p>
+            </div>
             {session.generatedNote.length > 200 && (
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
@@ -258,7 +242,7 @@ export function SessionCard({
         {session.feedback && (
           <div className="mb-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-200">
             <h5 className="text-sm font-medium text-blue-900 mb-1">Additional Notes</h5>
-            <p className="text-sm text-blue-800">{session.feedback}</p>
+            <div className="text-sm text-blue-800 whitespace-pre-wrap">{session.feedback}</div>
           </div>
         )}
 

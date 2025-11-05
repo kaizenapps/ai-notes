@@ -1,19 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { User, Client, SessionNote } from '@/types';
 
-interface SessionTemplate {
-  id: string;
-  name: string;
-  description?: string;
-  defaultDuration?: number;
-  defaultLocationId?: string;
-  defaultLocationName?: string;
-  templateObjectives: string[];
-  templateInterventions: string[];
-  createdBy?: string;
-  isActive: boolean;
-  createdAt: Date;
-}
 
 // Create connection pool
 const pool = new Pool({
@@ -247,9 +234,16 @@ export const clientDb = {
     return withDatabase(async (client) => {
       await setAuditUser(client, userId);
       const result = await client.query(
-        'SELECT id, first_name as "firstName", last_initial as "lastInitial", treatment_plan as "treatmentPlan" FROM clients WHERE is_active = true ORDER BY first_name, last_initial'
+        `SELECT id, first_name as "firstName", last_initial as "lastInitial", 
+         treatment_plan as "treatmentPlan", 
+         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected"
+         FROM clients WHERE is_active = true ORDER BY first_name, last_initial`
       );
-      return result.rows;
+      // Parse JSON strings to arrays
+      return result.rows.map(row => ({
+        ...row,
+        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : []
+      }));
     });
   },
 
@@ -257,10 +251,19 @@ export const clientDb = {
     return withDatabase(async (client) => {
       await setAuditUser(client, userId);
       const result = await client.query(
-        'SELECT id, first_name as "firstName", last_initial as "lastInitial", treatment_plan as "treatmentPlan" FROM clients WHERE id = $1 AND is_active = true',
+        `SELECT id, first_name as "firstName", last_initial as "lastInitial", 
+         treatment_plan as "treatmentPlan",
+         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected"
+         FROM clients WHERE id = $1 AND is_active = true`,
         [id]
       );
-      return result.rows[0] || null;
+      if (!result.rows[0]) return null;
+      // Parse JSON string to array
+      const row = result.rows[0];
+      return {
+        ...row,
+        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : []
+      };
     });
   },
 
@@ -268,17 +271,25 @@ export const clientDb = {
     firstName: string;
     lastInitial: string;
     treatmentPlan?: string;
+    objectivesSelected?: string[];
     createdBy: string;
   }): Promise<Client> {
     return withDatabase(async (client) => {
       await setAuditUser(client, clientData.createdBy);
+      const objectivesJson = clientData.objectivesSelected ? JSON.stringify(clientData.objectivesSelected) : '[]';
       const result = await client.query(
-        `INSERT INTO clients (first_name, last_initial, treatment_plan, created_by)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, first_name as "firstName", last_initial as "lastInitial", treatment_plan as "treatmentPlan"`,
-        [clientData.firstName, clientData.lastInitial, clientData.treatmentPlan, clientData.createdBy]
+        `INSERT INTO clients (first_name, last_initial, treatment_plan, objectives_selected, created_by)
+         VALUES ($1, $2, $3, $4::jsonb, $5)
+         RETURNING id, first_name as "firstName", last_initial as "lastInitial", 
+         treatment_plan as "treatmentPlan", 
+         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected"`,
+        [clientData.firstName, clientData.lastInitial, clientData.treatmentPlan, objectivesJson, clientData.createdBy]
       );
-      return result.rows[0];
+      const row = result.rows[0];
+      return {
+        ...row,
+        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : []
+      };
     });
   },
 
@@ -286,6 +297,7 @@ export const clientDb = {
     firstName?: string;
     lastInitial?: string;
     treatmentPlan?: string;
+    objectivesSelected?: string[];
   }, userId: string): Promise<Client | null> {
     return withDatabase(async (client) => {
       await setAuditUser(client, userId);
@@ -305,6 +317,10 @@ export const clientDb = {
         setClauses.push(`treatment_plan = $${paramCount++}`);
         values.push(clientData.treatmentPlan);
       }
+      if (clientData.objectivesSelected !== undefined) {
+        setClauses.push(`objectives_selected = $${paramCount++}::jsonb`);
+        values.push(JSON.stringify(clientData.objectivesSelected));
+      }
 
       if (setClauses.length === 0) return null;
 
@@ -312,10 +328,17 @@ export const clientDb = {
       const result = await client.query(
         `UPDATE clients SET ${setClauses.join(', ')}, updated_at = CURRENT_TIMESTAMP
          WHERE id = $${paramCount} AND is_active = true
-         RETURNING id, first_name as "firstName", last_initial as "lastInitial", treatment_plan as "treatmentPlan"`,
+         RETURNING id, first_name as "firstName", last_initial as "lastInitial", 
+         treatment_plan as "treatmentPlan",
+         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected"`,
         values
       );
-      return result.rows[0] || null;
+      if (!result.rows[0]) return null;
+      const row = result.rows[0];
+      return {
+        ...row,
+        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : []
+      };
     });
   }
 };
@@ -333,7 +356,6 @@ export const sessionDb = {
     customFeedback?: string;
     status?: 'draft' | 'completed' | 'archived';
     objectives: Array<{ id?: string; custom?: string }>;
-    interventions: Array<{ id?: string; custom?: string }>;
   }): Promise<SessionNote> {
     return withDatabase(async (client) => {
       // Validate userId before proceeding
@@ -379,32 +401,12 @@ export const sessionDb = {
           }
         }
         
-        // Insert interventions
-        const interventions = [];
-        for (const intervention of sessionData.interventions) {
-          if (intervention.id) {
-            await client.query(
-              'INSERT INTO session_interventions (session_note_id, intervention_id) VALUES ($1, $2)',
-              [session.id, intervention.id]
-            );
-            // Get intervention name
-            const intResult = await client.query('SELECT name FROM interventions WHERE id = $1', [intervention.id]);
-            interventions.push(intResult.rows[0]?.name || '');
-          } else if (intervention.custom) {
-            await client.query(
-              'INSERT INTO session_interventions (session_note_id, custom_intervention) VALUES ($1, $2)',
-              [session.id, intervention.custom]
-            );
-            interventions.push(intervention.custom);
-          }
-        }
-        
         await client.query('COMMIT');
         
         return {
           ...session,
           objectives,
-          interventions
+          interventions: [] // Interventions are now auto-extracted from treatment plan
         };
       } catch (error) {
         await client.query('ROLLBACK');
@@ -461,18 +463,10 @@ export const sessionDb = {
           [session.id]
         );
         
-        const interventionsResult = await client.query(
-          `SELECT COALESCE(intv.name, si.custom_intervention) as name
-           FROM session_interventions si
-           LEFT JOIN interventions intv ON si.intervention_id = intv.id
-           WHERE si.session_note_id = $1`,
-          [session.id]
-        );
-        
         return {
           ...session,
           objectives: objectivesResult.rows.map(row => row.name),
-          interventions: interventionsResult.rows.map(row => row.name)
+          interventions: [] // Interventions are auto-extracted from treatment plan
         };
       }));
       
@@ -522,18 +516,10 @@ export const sessionDb = {
           [session.id]
         );
         
-        const interventionsResult = await client.query(
-          `SELECT COALESCE(intv.name, si.custom_intervention) as name
-           FROM session_interventions si
-           LEFT JOIN interventions intv ON si.intervention_id = intv.id
-           WHERE si.session_note_id = $1`,
-          [session.id]
-        );
-        
         return {
           ...session,
           objectives: objectivesResult.rows.map(row => row.name),
-          interventions: interventionsResult.rows.map(row => row.name)
+          interventions: [] // Interventions are auto-extracted from treatment plan
         };
       }));
       
@@ -552,7 +538,6 @@ export const sessionDb = {
       customFeedback?: string;
       status?: 'draft' | 'completed' | 'archived';
       objectives?: Array<{ id?: string; custom?: string }>;
-      interventions?: Array<{ id?: string; custom?: string }>;
     },
     userId: string
   ): Promise<SessionNote | null> {
@@ -631,24 +616,6 @@ export const sessionDb = {
           }
         }
 
-        // Update interventions if provided
-        if (sessionData.interventions) {
-          await client.query('DELETE FROM session_interventions WHERE session_note_id = $1', [id]);
-          
-          for (const intervention of sessionData.interventions) {
-            if (intervention.id) {
-              await client.query(
-                'INSERT INTO session_interventions (session_note_id, intervention_id) VALUES ($1, $2)',
-                [id, intervention.id]
-              );
-            } else if (intervention.custom) {
-              await client.query(
-                'INSERT INTO session_interventions (session_note_id, custom_intervention) VALUES ($1, $2)',
-                [id, intervention.custom]
-              );
-            }
-          }
-        }
 
         await client.query('COMMIT');
         
@@ -723,230 +690,15 @@ export const sessionDb = {
         [id]
       );
       
-      const interventionsResult = await client.query(
-        `SELECT COALESCE(intv.name, si.custom_intervention) as name
-         FROM session_interventions si
-         LEFT JOIN interventions intv ON si.intervention_id = intv.id
-         WHERE si.session_note_id = $1`,
-        [id]
-      );
-      
       return {
         ...session,
         objectives: objectivesResult.rows.map(row => row.name),
-        interventions: interventionsResult.rows.map(row => row.name)
+        interventions: [] // Interventions are auto-extracted from treatment plan
       };
     });
   }
 };
 
-// Session templates database operations
-export const templateDb = {
-  async findAll(userId?: string): Promise<Array<{
-    id: string;
-    name: string;
-    description?: string;
-    defaultDuration?: number;
-    defaultLocationId?: string;
-    defaultLocationName?: string;
-    templateObjectives: string[];
-    templateInterventions: string[];
-    createdBy?: string;
-    isActive: boolean;
-    createdAt: Date;
-  }>> {
-    return withDatabase(async (client) => {
-      if (userId) await setAuditUser(client, userId);
-      
-      const result = await client.query(
-        `SELECT st.id, st.name, st.description, st.default_duration as "defaultDuration",
-                st.default_location_id as "defaultLocationId", sl.name as "defaultLocationName",
-                st.template_objectives as "templateObjectives", st.template_interventions as "templateInterventions",
-                st.created_by as "createdBy", st.is_active as "isActive", st.created_at as "createdAt"
-         FROM session_templates st
-         LEFT JOIN session_locations sl ON st.default_location_id = sl.id
-         WHERE st.is_active = true
-         ORDER BY st.name`
-      );
-      
-      // Convert UUID arrays to objective/intervention names
-      const templates = await Promise.all(result.rows.map(async (template) => {
-        const objectives = [];
-        const interventions = [];
-        
-        if (template.templateObjectives && template.templateObjectives.length > 0) {
-          const objResult = await client.query(
-            'SELECT name FROM treatment_objectives WHERE id = ANY($1)',
-            [template.templateObjectives]
-          );
-          objectives.push(...objResult.rows.map(row => row.name));
-        }
-        
-        if (template.templateInterventions && template.templateInterventions.length > 0) {
-          const intResult = await client.query(
-            'SELECT name FROM interventions WHERE id = ANY($1)',
-            [template.templateInterventions]
-          );
-          interventions.push(...intResult.rows.map(row => row.name));
-        }
-        
-        return {
-          ...template,
-          templateObjectives: objectives,
-          templateInterventions: interventions
-        };
-      }));
-      
-      return templates;
-    });
-  },
-
-  async findById(id: string, userId?: string): Promise<SessionTemplate | null> {
-    return withDatabase(async (client) => {
-      if (userId) await setAuditUser(client, userId);
-      
-      const result = await client.query(
-        `SELECT st.id, st.name, st.description, st.default_duration as "defaultDuration",
-                st.default_location_id as "defaultLocationId", sl.name as "defaultLocationName",
-                st.template_objectives as "templateObjectives", st.template_interventions as "templateInterventions",
-                st.created_by as "createdBy", st.is_active as "isActive", st.created_at as "createdAt"
-         FROM session_templates st
-         LEFT JOIN session_locations sl ON st.default_location_id = sl.id
-         WHERE st.id = $1 AND st.is_active = true`,
-        [id]
-      );
-      
-      if (!result.rows[0]) return null;
-      
-      const template = result.rows[0];
-      
-      // Convert UUID arrays to objective/intervention names
-      const objectives = [];
-      const interventions = [];
-      
-      if (template.templateObjectives && template.templateObjectives.length > 0) {
-        const objResult = await client.query(
-          'SELECT name FROM treatment_objectives WHERE id = ANY($1)',
-          [template.templateObjectives]
-        );
-        objectives.push(...objResult.rows.map(row => row.name));
-      }
-      
-      if (template.templateInterventions && template.templateInterventions.length > 0) {
-        const intResult = await client.query(
-          'SELECT name FROM interventions WHERE id = ANY($1)',
-          [template.templateInterventions]
-        );
-        interventions.push(...intResult.rows.map(row => row.name));
-      }
-      
-      return {
-        ...template,
-        templateObjectives: objectives,
-        templateInterventions: interventions
-      };
-    });
-  },
-
-  async create(templateData: {
-    name: string;
-    description?: string;
-    defaultDuration?: number;
-    defaultLocationId?: string;
-    templateObjectives?: string[]; // objective IDs
-    templateInterventions?: string[]; // intervention IDs
-    createdBy: string;
-  }): Promise<SessionTemplate> {
-    return withDatabase(async (client) => {
-      await setAuditUser(client, templateData.createdBy);
-      
-      const result = await client.query(
-        `INSERT INTO session_templates (name, description, default_duration, default_location_id, template_objectives, template_interventions, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, name, description, default_duration as "defaultDuration", default_location_id as "defaultLocationId", is_active as "isActive", created_at as "createdAt"`,
-        [
-          templateData.name,
-          templateData.description,
-          templateData.defaultDuration,
-          templateData.defaultLocationId,
-          templateData.templateObjectives || [],
-          templateData.templateInterventions || [],
-          templateData.createdBy
-        ]
-      );
-      
-      return result.rows[0];
-    });
-  },
-
-  async update(id: string, templateData: {
-    name?: string;
-    description?: string;
-    defaultDuration?: number;
-    defaultLocationId?: string;
-    templateObjectives?: string[];
-    templateInterventions?: string[];
-  }, userId: string): Promise<SessionTemplate | null> {
-    return withDatabase(async (client) => {
-      await setAuditUser(client, userId);
-      
-      const setClauses = [];
-      const values = [];
-      let paramCount = 1;
-
-      if (templateData.name !== undefined) {
-        setClauses.push(`name = $${paramCount++}`);
-        values.push(templateData.name);
-      }
-      if (templateData.description !== undefined) {
-        setClauses.push(`description = $${paramCount++}`);
-        values.push(templateData.description);
-      }
-      if (templateData.defaultDuration !== undefined) {
-        setClauses.push(`default_duration = $${paramCount++}`);
-        values.push(templateData.defaultDuration);
-      }
-      if (templateData.defaultLocationId !== undefined) {
-        setClauses.push(`default_location_id = $${paramCount++}`);
-        values.push(templateData.defaultLocationId);
-      }
-      if (templateData.templateObjectives !== undefined) {
-        setClauses.push(`template_objectives = $${paramCount++}`);
-        values.push(templateData.templateObjectives);
-      }
-      if (templateData.templateInterventions !== undefined) {
-        setClauses.push(`template_interventions = $${paramCount++}`);
-        values.push(templateData.templateInterventions);
-      }
-
-      if (setClauses.length === 0) return null;
-
-      values.push(id);
-      const result = await client.query(
-        `UPDATE session_templates SET ${setClauses.join(', ')}, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $${paramCount} AND is_active = true
-         RETURNING id, name, description, default_duration as "defaultDuration", default_location_id as "defaultLocationId", is_active as "isActive"`,
-        values
-      );
-      
-      return result.rows[0] || null;
-    });
-  },
-
-  async delete(id: string, userId: string): Promise<boolean> {
-    return withDatabase(async (client) => {
-      await setAuditUser(client, userId);
-      
-      // Soft delete by setting is_active = false
-      const result = await client.query(
-        'UPDATE session_templates SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-        [id]
-      );
-      
-      return (result.rowCount ?? 0) > 0;
-    });
-  }
-};
 
 // Lookup data operations
 export const lookupDb = {
@@ -968,14 +720,6 @@ export const lookupDb = {
     });
   },
 
-  async getInterventions(): Promise<Array<{ id: string; name: string; category?: string }>> {
-    return withDatabase(async (client) => {
-      const result = await client.query(
-        'SELECT id, name, category FROM interventions WHERE is_active = true ORDER BY category, name'
-      );
-      return result.rows;
-    });
-  }
 };
 
 // Health check
