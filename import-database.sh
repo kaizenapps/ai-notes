@@ -47,10 +47,22 @@ list_backup_files() {
     echo ""
     for i in "${!backup_files[@]}"; do
         local file="${backup_files[$i]}"
-        local size=$(du -h "$file" | cut -f1)
-        local date=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$file" 2>/dev/null || stat -c "%y" "$file" 2>/dev/null | cut -d' ' -f1,2 | cut -d'.' -f1)
+        local size=$(du -h "$file" 2>/dev/null | cut -f1 || echo "unknown")
+        
+        # Get file date - try multiple methods for cross-platform compatibility
+        local date=""
+        if date=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$file" 2>/dev/null); then
+            : # macOS format worked
+        elif date=$(stat -c "%y" "$file" 2>/dev/null | cut -d' ' -f1,2 | cut -d'.' -f1); then
+            : # Linux format worked
+        elif date=$(ls -l "$file" 2>/dev/null | awk '{print $6, $7, $8}'); then
+            : # Fallback to ls
+        else
+            date="unknown"
+        fi
+        
         echo -e "  ${GREEN}[$((i+1))]${NC} $file"
-        echo -e "      Size: $size | Date: $date"
+        echo -e "      Size: $size | Modified: $date"
     done
     echo ""
     
@@ -59,26 +71,138 @@ list_backup_files() {
     return 0
 }
 
+# Function to check if database has existing data
+check_existing_data() {
+    local table_count=$(docker compose exec -T postgres psql -U session_user -d session_notes -t -c \
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' \n')
+    
+    if [ "$table_count" -gt 0 ] 2>/dev/null; then
+        return 0  # Has tables
+    else
+        return 1  # Empty database
+    fi
+}
+
 # Function to import from SQL file
 import_sql_file() {
     local file_path=$1
     local description=$2
+    local force="${3:-false}"
     
-    if [ -f "$file_path" ]; then
-        echo -e "${GREEN}📥 Importing $description...${NC}"
-        
-        # Check if file is compressed
-        if [[ "$file_path" == *.gz ]]; then
-            echo -e "${BLUE}   Decompressing and importing...${NC}"
-            gunzip -c "$file_path" | docker compose exec -T postgres psql -U session_user -d session_notes
-        else
-            docker compose exec -T postgres psql -U session_user -d session_notes < "$file_path"
-        fi
-        
-        echo -e "${GREEN}✅ $description imported successfully${NC}"
-    else
+    if [ ! -f "$file_path" ]; then
         echo -e "${RED}❌ File not found: $file_path${NC}"
         return 1
+    fi
+    
+    # Check if database has existing data
+    if [ "$force" != "true" ] && check_existing_data; then
+        echo -e "${YELLOW}⚠️  WARNING: Database already contains tables!${NC}"
+        echo -e "${YELLOW}   Importing may cause errors or conflicts.${NC}"
+        read -p "Do you want to reset database first? (yes/no): " reset_choice
+        if [ "$reset_choice" = "yes" ]; then
+            echo -e "${YELLOW}🔄 Resetting database...${NC}"
+            docker compose down
+            docker volume rm session-notes-app_postgres_data 2>/dev/null || true
+            docker compose up -d postgres
+            sleep 10
+            echo -e "${GREEN}✅ Database reset complete${NC}"
+        fi
+    fi
+    
+    echo -e "${GREEN}📥 Importing $description...${NC}"
+    echo -e "${BLUE}   File: $file_path${NC}"
+    
+    # Check if file is compressed
+    if [[ "$file_path" == *.gz ]]; then
+        echo -e "${BLUE}   Decompressing and importing...${NC}"
+        
+        # Use psql with error handling - suppress expected errors but keep important ones
+        echo -e "${BLUE}   Importing (this may take a moment)...${NC}"
+        
+        # Import and filter out expected/harmless errors
+        import_output=$(gunzip -c "$file_path" | \
+            docker compose exec -T postgres psql \
+                -U session_user \
+                -d session_notes \
+                -v ON_ERROR_STOP=0 \
+                2>&1)
+        
+        # Count errors
+        error_count=$(echo "$import_output" | grep -c "ERROR:" || echo "0")
+        warning_count=$(echo "$import_output" | grep -c "WARNING:" || echo "0")
+        
+        # Show only important errors (filter out expected ones)
+        important_errors=$(echo "$import_output" | \
+            grep "ERROR:" | \
+            grep -v "role \"postgres\" does not exist" | \
+            grep -v "already exists" | \
+            grep -v "trailing junk" | \
+            grep -v "column.*does not exist" || true)
+        
+        # Show warnings if any
+        if [ "$warning_count" -gt 0 ]; then
+            echo -e "${YELLOW}   ⚠️  $warning_count warning(s) during import${NC}"
+        fi
+        
+        # Show important errors if any
+        if [ -n "$important_errors" ]; then
+            echo -e "${RED}   ❌ Important errors found:${NC}"
+            echo "$important_errors" | head -5
+            if [ "$(echo "$important_errors" | wc -l)" -gt 5 ]; then
+                echo -e "${RED}   ... and $(($(echo "$important_errors" | wc -l) - 5)) more${NC}"
+            fi
+        elif [ "$error_count" -gt 0 ]; then
+            # Only expected errors were found
+            echo -e "${GREEN}   ✓ Import completed (ignored $error_count expected error(s))${NC}"
+        fi
+        
+    else
+        echo -e "${BLUE}   Importing (this may take a moment)...${NC}"
+        
+        # Import and filter out expected/harmless errors
+        import_output=$(docker compose exec -T postgres psql \
+            -U session_user \
+            -d session_notes \
+            -v ON_ERROR_STOP=0 \
+            < "$file_path" 2>&1)
+        
+        # Count errors
+        error_count=$(echo "$import_output" | grep -c "ERROR:" || echo "0")
+        
+        # Show only important errors
+        important_errors=$(echo "$import_output" | \
+            grep "ERROR:" | \
+            grep -v "role \"postgres\" does not exist" | \
+            grep -v "already exists" | \
+            grep -v "trailing junk" | \
+            grep -v "column.*does not exist" || true)
+        
+        if [ -n "$important_errors" ]; then
+            echo -e "${RED}   ❌ Important errors found:${NC}"
+            echo "$important_errors" | head -5
+        elif [ "$error_count" -gt 0 ]; then
+            echo -e "${GREEN}   ✓ Import completed (ignored $error_count expected error(s))${NC}"
+        fi
+    fi
+    
+    # Verify import
+    if check_existing_data; then
+        local table_count=$(docker compose exec -T postgres psql -U session_user -d session_notes -t -c \
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' \n')
+        echo -e "${GREEN}✅ Import completed! Found $table_count table(s) in database${NC}"
+        
+        # Check for data
+        local user_count=$(docker compose exec -T postgres psql -U session_user -d session_notes -t -c \
+            "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' \n')
+        local client_count=$(docker compose exec -T postgres psql -U session_user -d session_notes -t -c \
+            "SELECT COUNT(*) FROM clients;" 2>/dev/null | tr -d ' \n')
+        
+        if [ "$user_count" -gt 0 ] 2>/dev/null || [ "$client_count" -gt 0 ] 2>/dev/null; then
+            echo -e "${GREEN}   Users: $user_count | Clients: $client_count${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Import completed but database appears empty${NC}"
+        echo -e "${YELLOW}   Check the errors above - backup file may be incompatible${NC}"
     fi
 }
 
@@ -124,7 +248,8 @@ case $choice in
             if [ "$file_num" -ge 1 ] && [ "$file_num" -le "${#BACKUP_FILES[@]}" ]; then
                 selected_file="${BACKUP_FILES[$((file_num-1))]}"
                 echo -e "${BLUE}Selected: $selected_file${NC}"
-                import_sql_file "$selected_file" "backup file"
+                echo ""
+                import_sql_file "$selected_file" "backup file" "false"
             else
                 echo -e "${RED}❌ Invalid file number${NC}"
                 exit 1
