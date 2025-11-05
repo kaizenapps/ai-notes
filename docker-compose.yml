@@ -5,9 +5,9 @@ services:
     container_name: session-notes-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: session_notes
-      POSTGRES_USER: session_user
-      POSTGRES_PASSWORD: session_password_123
+      POSTGRES_DB: ${POSTGRES_DB:-session_notes}
+      POSTGRES_USER: ${POSTGRES_USER:-session_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-session_password_123}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -32,10 +32,11 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://session_user:session_password_123@postgres:5432/session_notes
-      JWT_SECRET: s3ssion-notes-super-secret-jwt-key-9a7f4c2d8b1e
+      DATABASE_URL: ${DATABASE_URL:-postgresql://session_user:session_password_123@postgres:5432/session_notes}
+      JWT_SECRET: ${JWT_SECRET:-s3ssion-notes-super-secret-jwt-key-9a7f4c2d8b1e}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      NEXT_PUBLIC_APP_URL: http://localhost
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost}
     depends_on:
       postgres:
         condition: service_healthy

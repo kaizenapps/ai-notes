@@ -83,6 +83,31 @@ check_existing_data() {
     fi
 }
 
+# Function to ensure fresh database (no tables)
+ensure_fresh_database() {
+    echo -e "${YELLOW}🔄 Ensuring fresh database (removing existing tables if any)...${NC}"
+    
+    # Drop all tables if they exist
+    docker compose exec -T postgres psql -U session_user -d session_notes -c "
+        DO \$\$ 
+        DECLARE 
+            r RECORD;
+        BEGIN
+            FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+                EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+            END LOOP;
+        END \$\$;
+    " 2>/dev/null || true
+    
+    # Drop all extensions and recreate them
+    docker compose exec -T postgres psql -U session_user -d session_notes -c "
+        DROP EXTENSION IF EXISTS pgcrypto CASCADE;
+        DROP EXTENSION IF EXISTS \"uuid-ossp\" CASCADE;
+    " 2>/dev/null || true
+    
+    echo -e "${GREEN}✅ Database is now fresh and ready for import${NC}"
+}
+
 # Function to import from SQL file
 import_sql_file() {
     local file_path=$1
@@ -98,14 +123,9 @@ import_sql_file() {
     if [ "$force" != "true" ] && check_existing_data; then
         echo -e "${YELLOW}⚠️  WARNING: Database already contains tables!${NC}"
         echo -e "${YELLOW}   Importing may cause errors or conflicts.${NC}"
-        read -p "Do you want to reset database first? (yes/no): " reset_choice
+        read -p "Do you want to clear existing tables first? (yes/no): " reset_choice
         if [ "$reset_choice" = "yes" ]; then
-            echo -e "${YELLOW}🔄 Resetting database...${NC}"
-            docker compose down
-            docker volume rm session-notes-app_postgres_data 2>/dev/null || true
-            docker compose up -d postgres
-            sleep 10
-            echo -e "${GREEN}✅ Database reset complete${NC}"
+            ensure_fresh_database
         fi
     fi
     
@@ -249,7 +269,14 @@ case $choice in
                 selected_file="${BACKUP_FILES[$((file_num-1))]}"
                 echo -e "${BLUE}Selected: $selected_file${NC}"
                 echo ""
-                import_sql_file "$selected_file" "backup file" "false"
+                
+                # Ensure fresh database before import
+                if check_existing_data; then
+                    echo -e "${YELLOW}⚠️  Database contains existing tables. Clearing them for fresh import...${NC}"
+                    ensure_fresh_database
+                fi
+                
+                import_sql_file "$selected_file" "backup file" "true"
             else
                 echo -e "${RED}❌ Invalid file number${NC}"
                 exit 1
@@ -298,12 +325,21 @@ case $choice in
             echo -e "${GREEN}📥 Importing from local PostgreSQL...${NC}"
             echo -e "${BLUE}   Source: $LOCAL_USER@$LOCAL_HOST:$LOCAL_PORT/$LOCAL_DB${NC}"
             
+            # Ensure fresh database
+            if check_existing_data; then
+                echo -e "${YELLOW}⚠️  Clearing existing tables for fresh import...${NC}"
+                ensure_fresh_database
+            fi
+            
             PGPASSWORD="$LOCAL_PASS" pg_dump \
                 -U "$LOCAL_USER" \
                 -d "$LOCAL_DB" \
                 -h "$LOCAL_HOST" \
                 -p "$LOCAL_PORT" | \
-                docker compose exec -T postgres psql -U session_user -d session_notes
+                docker compose exec -T postgres psql \
+                    -U session_user \
+                    -d session_notes \
+                    -v ON_ERROR_STOP=0
             
             echo -e "${GREEN}✅ Import from local PostgreSQL completed successfully${NC}"
         else
