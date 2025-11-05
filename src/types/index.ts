@@ -29,6 +29,7 @@ export interface SessionNote {
 
 export interface FormData {
   clientId: string;
+  clientName?: string; // Format: "FirstName LastInitial." (e.g., "Dark T.")
   location: string;
   duration: string;
   objectives: string[];

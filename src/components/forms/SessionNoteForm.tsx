@@ -170,8 +170,12 @@ function SessionNoteFormContent() {
       // Note: Interventions are now auto-extracted from treatment plan by OpenAI
       // No need to pre-extract them here - OpenAI will use the treatment plan directly
 
+      // Format client name: "FirstName LastInitial."
+      const clientName = `${selectedClient.firstName} ${selectedClient.lastInitial}.`;
+
       const sessionData = {
         clientId: clientIdValue, // Use value from form, not state
+        clientName: clientName, // Format: "FirstName LastInitial." (e.g., "Dark T.")
         location: locationValue, // Use value from form, not state
         duration: durationValue, // Use value from form, not state
         objectives: selectedObjectives, // MultiSelect uses controlled state (correct)

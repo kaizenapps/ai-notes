@@ -67,6 +67,8 @@ export async function POST(request: NextRequest) {
 }
 
 interface SessionData {
+  clientId?: string;
+  clientName?: string; // Format: "FirstName LastInitial." (e.g., "Dark T.")
   location: string;
   duration: string;
   objectives: string[];
@@ -105,6 +107,7 @@ CRITICAL COMPLIANCE REQUIREMENTS:
 - Use language like "peer support", "mutual support", "shared experiences" instead of "therapy" or "treatment"
 
 SESSION INFORMATION:
+- Client: ${data.clientName || 'Client'}
 - Location: ${data.location}
 - Duration: ${duration} minutes
 - Session Objectives: ${data.objectives.join(', ')}
@@ -159,7 +162,7 @@ Peer Support Interventions:
 [Describe the specific peer support interventions used. Reference interventions from the treatment plan if provided. Use peer support language - avoid clinical terms. Examples: active listening, shared experiences, mutual support, goal-setting, resource sharing, peer mentoring, etc.]
 
 Patient Response/Content:
-[Describe how the client engaged with the session, their responses, participation level, any insights shared, progress observed, and their feedback. Use only first name or initials. Be specific and factual.]
+[Describe how the client engaged with the session, their responses, participation level, any insights shared, progress observed, and their feedback. IMPORTANT: Use the client's name "${data.clientName || 'Client'}" exactly as provided in the session information above. Do NOT use generic names like "J.", "R.", or other initials unless that is the actual client's name. Be specific and factual.]
 
 Plan for Next Session:
 [Based on the session objectives and treatment plan, outline what should be addressed in the next session. Reference treatment plan goals if applicable. Keep it focused and actionable.]`;
