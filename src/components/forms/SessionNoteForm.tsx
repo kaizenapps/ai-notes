@@ -128,8 +128,6 @@ function SessionNoteFormContent() {
         return;
       }
       
-      let interventionText: string;
-      
       // Save/update treatment plan to client if it was modified
       if (treatmentPlanText.trim() !== (selectedClient.treatmentPlan || '')) {
         try {
@@ -169,24 +167,8 @@ function SessionNoteFormContent() {
         }
       }
       
-      // Always auto-extract from treatment plan based on selected objectives (use textarea value)
-      if (treatmentPlanText.trim() && selectedObjectives.length > 0) {
-        console.log('Attempting intervention extraction:', {
-          hasTreatmentPlan: !!treatmentPlanText.trim(),
-          treatmentPlanLength: treatmentPlanText.trim().length,
-          objectives: selectedObjectives
-        });
-        const extractedIntervention = extractInterventionText(
-          treatmentPlanText.trim(),
-          selectedObjectives
-        );
-        console.log('Extracted intervention:', extractedIntervention);
-        interventionText = extractedIntervention || 'Peer support interventions';
-      } 
-      // Fallback if no treatment plan
-      else {
-        interventionText = 'Peer support interventions focused on client goals';
-      }
+      // Note: Interventions are now auto-extracted from treatment plan by OpenAI
+      // No need to pre-extract them here - OpenAI will use the treatment plan directly
 
       const sessionData = {
         clientId: clientIdValue, // Use value from form, not state

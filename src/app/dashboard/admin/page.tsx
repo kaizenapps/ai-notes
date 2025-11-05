@@ -7,7 +7,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { styles } from '@/lib/styles';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
-import { Client as ClientType, User } from '@/types';
+import { Client as ClientType } from '@/types';
 import { UserManager } from '@/components/admin/UserManager';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';

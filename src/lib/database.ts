@@ -582,7 +582,7 @@ export const sessionDb = {
           values.push(sessionData.status);
         }
 
-        if (setClauses.length === 0 && !sessionData.objectives && !sessionData.interventions) {
+        if (setClauses.length === 0 && !sessionData.objectives) {
           await client.query('ROLLBACK');
           return null;
         }
