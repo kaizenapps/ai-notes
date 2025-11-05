@@ -14,6 +14,17 @@ NC='\033[0m' # No Color
 
 echo -e "${GREEN}🗄️  Database Import Script${NC}"
 
+# Load Docker database credentials from .env (production) or docker-compose defaults
+DOCKER_DB_USER="${POSTGRES_USER:-session_user}"
+DOCKER_DB_NAME="${POSTGRES_DB:-session_notes}"
+
+# If .env exists, try to load it for Docker container credentials
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+    DOCKER_DB_USER="${POSTGRES_USER:-session_user}"
+    DOCKER_DB_NAME="${POSTGRES_DB:-session_notes}"
+fi
+
 # Check if docker compose is running
 if ! docker compose ps | grep -q "session-notes-db.*Up"; then
     echo -e "${YELLOW}⚠️  Starting database container...${NC}"
@@ -73,7 +84,7 @@ list_backup_files() {
 
 # Function to check if database has existing data
 check_existing_data() {
-    local table_count=$(docker compose exec -T postgres psql -U session_user -d session_notes -t -c \
+    local table_count=$(docker compose exec -T postgres psql -U "$DOCKER_DB_USER" -d "$DOCKER_DB_NAME" -t -c \
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' \n')
     
     if [ "$table_count" -gt 0 ] 2>/dev/null; then
@@ -88,7 +99,7 @@ ensure_fresh_database() {
     echo -e "${YELLOW}🔄 Ensuring fresh database (removing existing tables if any)...${NC}"
     
     # Drop all tables if they exist
-    docker compose exec -T postgres psql -U session_user -d session_notes -c "
+    docker compose exec -T postgres psql -U "$DOCKER_DB_USER" -d "$DOCKER_DB_NAME" -c "
         DO \$\$ 
         DECLARE 
             r RECORD;
@@ -100,7 +111,7 @@ ensure_fresh_database() {
     " 2>/dev/null || true
     
     # Drop all extensions and recreate them
-    docker compose exec -T postgres psql -U session_user -d session_notes -c "
+    docker compose exec -T postgres psql -U "$DOCKER_DB_USER" -d "$DOCKER_DB_NAME" -c "
         DROP EXTENSION IF EXISTS pgcrypto CASCADE;
         DROP EXTENSION IF EXISTS \"uuid-ossp\" CASCADE;
     " 2>/dev/null || true
@@ -142,8 +153,8 @@ import_sql_file() {
         # Import and filter out expected/harmless errors
         import_output=$(gunzip -c "$file_path" | \
             docker compose exec -T postgres psql \
-                -U session_user \
-                -d session_notes \
+                -U "$DOCKER_DB_USER" \
+                -d "$DOCKER_DB_NAME" \
                 -v ON_ERROR_STOP=0 \
                 2>&1)
         
@@ -181,8 +192,8 @@ import_sql_file() {
         
         # Import and filter out expected/harmless errors
         import_output=$(docker compose exec -T postgres psql \
-            -U session_user \
-            -d session_notes \
+            -U "$DOCKER_DB_USER" \
+            -d "$DOCKER_DB_NAME" \
             -v ON_ERROR_STOP=0 \
             < "$file_path" 2>&1)
         
@@ -207,14 +218,14 @@ import_sql_file() {
     
     # Verify import
     if check_existing_data; then
-        local table_count=$(docker compose exec -T postgres psql -U session_user -d session_notes -t -c \
+        local table_count=$(docker compose exec -T postgres psql -U "$DOCKER_DB_USER" -d "$DOCKER_DB_NAME" -t -c \
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' \n')
         echo -e "${GREEN}✅ Import completed! Found $table_count table(s) in database${NC}"
         
         # Check for data
-        local user_count=$(docker compose exec -T postgres psql -U session_user -d session_notes -t -c \
+        local user_count=$(docker compose exec -T postgres psql -U "$DOCKER_DB_USER" -d "$DOCKER_DB_NAME" -t -c \
             "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' \n')
-        local client_count=$(docker compose exec -T postgres psql -U session_user -d session_notes -t -c \
+        local client_count=$(docker compose exec -T postgres psql -U "$DOCKER_DB_USER" -d "$DOCKER_DB_NAME" -t -c \
             "SELECT COUNT(*) FROM clients;" 2>/dev/null | tr -d ' \n')
         
         if [ "$user_count" -gt 0 ] 2>/dev/null || [ "$client_count" -gt 0 ] 2>/dev/null; then
@@ -235,9 +246,9 @@ import_dump() {
         
         # Check file type
         if [[ "$dump_file" == *.gz ]]; then
-            gunzip -c "$dump_file" | docker compose exec -T postgres psql -U session_user -d session_notes
+            gunzip -c "$dump_file" | docker compose exec -T postgres psql -U "$DOCKER_DB_USER" -d "$DOCKER_DB_NAME"
         else
-            docker compose exec -T postgres psql -U session_user -d session_notes < "$dump_file"
+            docker compose exec -T postgres psql -U "$DOCKER_DB_USER" -d "$DOCKER_DB_NAME" < "$dump_file"
         fi
         
         echo -e "${GREEN}✅ Database dump imported successfully${NC}"
@@ -253,7 +264,7 @@ echo "1. Select from existing backup files"
 echo "2. Import from SQL file (enter path manually)"
 echo "3. Import from database dump (.sql file)"
 echo "4. Import from PostgreSQL dump (.dump file)"
-echo "5. Import from local PostgreSQL (using .env.local)"
+echo "5. Import from local PostgreSQL (using .env - production)"
 echo "6. Reset database and import schema only"
 
 read -p "Enter your choice (1-6): " choice
@@ -298,7 +309,7 @@ case $choice in
         read -p "Enter path to PostgreSQL dump (.dump): " dump_file
         if [ -f "$dump_file" ]; then
             echo -e "${GREEN}📥 Importing PostgreSQL dump: $dump_file${NC}"
-            docker compose exec -T postgres pg_restore -U session_user -d session_notes --clean --if-exists < "$dump_file"
+            docker compose exec -T postgres pg_restore -U "$DOCKER_DB_USER" -d "$DOCKER_DB_NAME" --clean --if-exists < "$dump_file"
             echo -e "${GREEN}✅ PostgreSQL dump imported successfully${NC}"
         else
             echo -e "${RED}❌ Dump file not found: $dump_file${NC}"
@@ -306,19 +317,32 @@ case $choice in
         fi
         ;;
     5)
-        # Import from local PostgreSQL using .env.local
-        if [ -f .env.local ]; then
-            echo -e "${BLUE}📋 Loading credentials from .env.local...${NC}"
-            export $(cat .env.local | grep -v '^#' | xargs)
+        # Import from local PostgreSQL using .env (production)
+        if [ -f .env ]; then
+            echo -e "${BLUE}📋 Loading credentials from .env (production)...${NC}"
+            # Re-load .env to ensure we have the latest values
+            export $(cat .env | grep -v '^#' | xargs)
             
-            LOCAL_USER="${DB_USER:-session_notes_user}"
-            LOCAL_DB="${DB_NAME:-session_notes_db}"
-            LOCAL_HOST="${DB_HOST:-localhost}"
-            LOCAL_PORT="${DB_PORT:-5432}"
-            LOCAL_PASS="${DB_PASSWORD}"
+            # Try to extract from DATABASE_URL first, then fall back to individual vars
+            if [ -n "$DATABASE_URL" ]; then
+                # Parse DATABASE_URL format: postgresql://user:password@host:port/database
+                LOCAL_USER=$(echo "$DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+                LOCAL_PASS=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+                LOCAL_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:]*\):.*|\1|p')
+                LOCAL_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
+                LOCAL_DB=$(echo "$DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+            else
+                # Fall back to individual environment variables
+                LOCAL_USER="${POSTGRES_USER:-${DB_USER:-session_user}}"
+                LOCAL_DB="${POSTGRES_DB:-${DB_NAME:-session_notes}}"
+                LOCAL_HOST="${DB_HOST:-localhost}"
+                LOCAL_PORT="${DB_PORT:-5432}"
+                LOCAL_PASS="${POSTGRES_PASSWORD:-${DB_PASSWORD}}"
+            fi
             
             if [ -z "$LOCAL_PASS" ]; then
-                echo -e "${RED}❌ DB_PASSWORD not found in .env.local${NC}"
+                echo -e "${RED}❌ Database password not found in .env${NC}"
+                echo -e "${YELLOW}   Please set DATABASE_URL or POSTGRES_PASSWORD/DB_PASSWORD in .env${NC}"
                 exit 1
             fi
             
@@ -337,13 +361,14 @@ case $choice in
                 -h "$LOCAL_HOST" \
                 -p "$LOCAL_PORT" | \
                 docker compose exec -T postgres psql \
-                    -U session_user \
-                    -d session_notes \
+                    -U "$DOCKER_DB_USER" \
+                    -d "$DOCKER_DB_NAME" \
                     -v ON_ERROR_STOP=0
             
             echo -e "${GREEN}✅ Import from local PostgreSQL completed successfully${NC}"
         else
-            echo -e "${RED}❌ .env.local file not found${NC}"
+            echo -e "${RED}❌ .env file not found${NC}"
+            echo -e "${YELLOW}   Please create .env file with database credentials${NC}"
             exit 1
         fi
         ;;
