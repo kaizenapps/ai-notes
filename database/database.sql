@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS clients (
     last_initial VARCHAR(1) NOT NULL,
     treatment_plan TEXT,
     objectives_selected JSONB DEFAULT '[]'::jsonb,
+    extracted_interventions TEXT[] DEFAULT '{}',
     is_active BOOLEAN DEFAULT true,
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -57,9 +58,11 @@ CREATE INDEX IF NOT EXISTS idx_clients_first_name ON clients(first_name);
 CREATE INDEX IF NOT EXISTS idx_clients_is_active ON clients(is_active);
 CREATE INDEX IF NOT EXISTS idx_clients_created_by ON clients(created_by);
 CREATE INDEX IF NOT EXISTS idx_clients_objectives_selected ON clients USING GIN (objectives_selected);
+CREATE INDEX IF NOT EXISTS idx_clients_extracted_interventions ON clients USING GIN (extracted_interventions);
 
--- Comment for documentation
+-- Comments for documentation
 COMMENT ON COLUMN clients.objectives_selected IS 'Array of objective IDs pre-selected for this client profile';
+COMMENT ON COLUMN clients.extracted_interventions IS 'AI-extracted peer support interventions from treatment plan. Format: "[Category] - [Description]"';
 
 -- ============================================================================
 -- SESSION LOCATIONS TABLE

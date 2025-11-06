@@ -236,13 +236,15 @@ export const clientDb = {
       const result = await client.query(
         `SELECT id, first_name as "firstName", last_initial as "lastInitial", 
          treatment_plan as "treatmentPlan", 
-         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected"
+         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
+         COALESCE(extracted_interventions, '{}') as "extractedInterventions"
          FROM clients WHERE is_active = true ORDER BY first_name, last_initial`
       );
       // Parse JSON strings to arrays
       return result.rows.map(row => ({
         ...row,
-        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : []
+        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
+        extractedInterventions: row.extractedInterventions || []
       }));
     });
   },
@@ -253,7 +255,8 @@ export const clientDb = {
       const result = await client.query(
         `SELECT id, first_name as "firstName", last_initial as "lastInitial", 
          treatment_plan as "treatmentPlan",
-         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected"
+         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
+         COALESCE(extracted_interventions, '{}') as "extractedInterventions"
          FROM clients WHERE id = $1 AND is_active = true`,
         [id]
       );
@@ -262,7 +265,8 @@ export const clientDb = {
       const row = result.rows[0];
       return {
         ...row,
-        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : []
+        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
+        extractedInterventions: row.extractedInterventions || []
       };
     });
   },
@@ -272,23 +276,26 @@ export const clientDb = {
     lastInitial: string;
     treatmentPlan?: string;
     objectivesSelected?: string[];
+    extractedInterventions?: string[];
     createdBy: string;
   }): Promise<Client> {
     return withDatabase(async (client) => {
       await setAuditUser(client, clientData.createdBy);
       const objectivesJson = clientData.objectivesSelected ? JSON.stringify(clientData.objectivesSelected) : '[]';
       const result = await client.query(
-        `INSERT INTO clients (first_name, last_initial, treatment_plan, objectives_selected, created_by)
-         VALUES ($1, $2, $3, $4::jsonb, $5)
+        `INSERT INTO clients (first_name, last_initial, treatment_plan, objectives_selected, extracted_interventions, created_by)
+         VALUES ($1, $2, $3, $4::jsonb, $5, $6)
          RETURNING id, first_name as "firstName", last_initial as "lastInitial", 
          treatment_plan as "treatmentPlan", 
-         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected"`,
-        [clientData.firstName, clientData.lastInitial, clientData.treatmentPlan, objectivesJson, clientData.createdBy]
+         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
+         COALESCE(extracted_interventions, '{}') as "extractedInterventions"`,
+        [clientData.firstName, clientData.lastInitial, clientData.treatmentPlan, objectivesJson, clientData.extractedInterventions || [], clientData.createdBy]
       );
       const row = result.rows[0];
       return {
         ...row,
-        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : []
+        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
+        extractedInterventions: row.extractedInterventions || []
       };
     });
   },
@@ -298,6 +305,7 @@ export const clientDb = {
     lastInitial?: string;
     treatmentPlan?: string;
     objectivesSelected?: string[];
+    extractedInterventions?: string[];
   }, userId: string): Promise<Client | null> {
     return withDatabase(async (client) => {
       await setAuditUser(client, userId);
@@ -321,6 +329,10 @@ export const clientDb = {
         setClauses.push(`objectives_selected = $${paramCount++}::jsonb`);
         values.push(JSON.stringify(clientData.objectivesSelected));
       }
+      if (clientData.extractedInterventions !== undefined) {
+        setClauses.push(`extracted_interventions = $${paramCount++}`);
+        values.push(clientData.extractedInterventions);
+      }
 
       if (setClauses.length === 0) return null;
 
@@ -330,14 +342,16 @@ export const clientDb = {
          WHERE id = $${paramCount} AND is_active = true
          RETURNING id, first_name as "firstName", last_initial as "lastInitial", 
          treatment_plan as "treatmentPlan",
-         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected"`,
+         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
+         COALESCE(extracted_interventions, '{}') as "extractedInterventions"`,
         values
       );
       if (!result.rows[0]) return null;
       const row = result.rows[0];
       return {
         ...row,
-        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : []
+        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
+        extractedInterventions: row.extractedInterventions || []
       };
     });
   }

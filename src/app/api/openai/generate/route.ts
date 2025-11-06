@@ -74,6 +74,7 @@ interface SessionData {
   objectives: string[];
   feedback?: string;
   treatmentPlan?: string;
+  interventions?: string[]; // AI-extracted interventions from treatment plan
 }
 
 function buildPrompt(data: SessionData): string {
@@ -85,6 +86,11 @@ function buildPrompt(data: SessionData): string {
   // Build treatment plan section with clear instructions
   const treatmentPlanSection = data.treatmentPlan && data.treatmentPlan.trim().length > 0 
     ? `\n\nCLIENT TREATMENT PLAN:\n${data.treatmentPlan.trim()}\n` 
+    : '';
+  
+  // Build interventions section
+  const interventionsSection = data.interventions && data.interventions.length > 0
+    ? `\n\nEXTRACTED PEER SUPPORT INTERVENTIONS:\n${data.interventions.map((i, idx) => `${idx + 1}. ${i}`).join('\n')}\n`
     : '';
   
   // Calculate time breakdown points
@@ -111,12 +117,18 @@ SESSION INFORMATION:
 - Location: ${data.location}
 - Duration: ${duration} minutes
 - Session Objectives: ${data.objectives.join(', ')}
-${treatmentPlanSection}${additionalNotesSection}
+${treatmentPlanSection}${interventionsSection}${additionalNotesSection}
 
 INSTRUCTIONS FOR NOTE GENERATION:
 
-1. TREATMENT PLAN USAGE:
-${data.treatmentPlan && data.treatmentPlan.trim().length > 0 
+1. TREATMENT PLAN & INTERVENTIONS USAGE:
+${data.interventions && data.interventions.length > 0
+  ? `   - IMPORTANT: Reference the extracted peer support interventions listed above
+   - These interventions were specifically identified from the client's treatment plan
+   - Include these interventions in the "Peer Support Interventions" section of your note
+   - Describe how these specific interventions were applied during the session
+   - Connect session activities to these intervention approaches`
+  : data.treatmentPlan && data.treatmentPlan.trim().length > 0 
   ? `   - Extract and reference relevant goals, objectives, and interventions from the treatment plan
    - Align session activities with the treatment plan objectives listed above
    - Use specific interventions mentioned in the treatment plan when describing peer support activities
@@ -159,7 +171,7 @@ Activities (time-based breakdown):
 Use specific time ranges based on the ${duration}-minute duration. Include line breaks between each time segment.]
 
 Peer Support Interventions:
-[Describe the specific peer support interventions used. Reference interventions from the treatment plan if provided. Use peer support language - avoid clinical terms. Examples: active listening, shared experiences, mutual support, goal-setting, resource sharing, peer mentoring, etc.]
+[Describe the specific peer support interventions used. ${data.interventions && data.interventions.length > 0 ? 'IMPORTANT: Reference and use the extracted interventions listed above. Explain how each intervention was applied during the session.' : 'Reference interventions from the treatment plan if provided.'} Use peer support language - avoid clinical terms. Examples: active listening, shared experiences, mutual support, goal-setting, resource sharing, peer mentoring, etc.]
 
 Patient Response/Content:
 [Describe how the client engaged with the session, their responses, participation level, any insights shared, progress observed, and their feedback. IMPORTANT: Use the client's name "${data.clientName || 'Client'}" exactly as provided in the session information above. Do NOT use generic names like "J.", "R.", or other initials unless that is the actual client's name. Be specific and factual.]

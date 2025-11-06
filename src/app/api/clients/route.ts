@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { firstName, lastInitial, treatmentPlan, objectivesSelected } = body;
+    const { firstName, lastInitial, treatmentPlan, objectivesSelected, extractedInterventions } = body;
 
     // Validate required fields
     if (!firstName || !lastInitial) {
@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
       lastInitial: lastInitial.toUpperCase(),
       treatmentPlan,
       objectivesSelected: objectivesSelected || [],
+      extractedInterventions: extractedInterventions || [],
       createdBy: payload.userId
     });
 

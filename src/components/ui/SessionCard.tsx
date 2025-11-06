@@ -17,11 +17,13 @@ export interface SessionCardProps {
     feedback?: string;
     status: 'draft' | 'completed' | 'archived';
     createdAt: Date | string;
+    treatmentPlan?: string;
   };
   onEdit?: (session: SessionCardProps['session']) => void;
   onDelete?: (sessionId: string) => void;
   onExport?: (sessionId: string, format: 'pdf' | 'docx' | 'txt') => void;
   onStatusChange?: (sessionId: string, status: 'draft' | 'completed' | 'archived') => void;
+  onRefine?: (session: SessionCardProps['session']) => void;
   showClientName?: boolean;
   showUserName?: boolean;
 }
@@ -32,6 +34,7 @@ export function SessionCard({
   onDelete,
   onExport,
   onStatusChange,
+  onRefine,
   showClientName = true,
   showUserName = false
 }: SessionCardProps) {
@@ -136,6 +139,18 @@ export function SessionCard({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 ml-4">
+            {onRefine && session.status !== 'archived' && (
+              <button
+                onClick={() => onRefine(session)}
+                className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                title="Refine with AI feedback"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </button>
+            )}
+            
             {onEdit && session.status !== 'archived' && (
               <button
                 onClick={() => onEdit(session)}

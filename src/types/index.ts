@@ -11,6 +11,7 @@ export interface Client {
   lastInitial: string; // HIPAA: Only store initials
   treatmentPlan?: string;
   objectivesSelected?: string[]; // Array of objective IDs selected for this client
+  extractedInterventions?: string[]; // AI-extracted interventions from treatment plan
 }
 
 export interface SessionNote {

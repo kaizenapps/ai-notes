@@ -19,6 +19,7 @@ interface SessionHistoryItem extends Omit<SessionNote, 'date' | 'createdAt'> {
   status: 'draft' | 'completed' | 'archived';
   date: Date | string;
   createdAt: Date | string;
+  treatmentPlan?: string;
 }
 
 function HistoryPageContent() {
@@ -44,6 +45,11 @@ function HistoryPageContent() {
   });
   const [editFormLoading, setEditFormLoading] = useState(false);
   const [editFormError, setEditFormError] = useState('');
+  const [refiningSession, setRefiningSession] = useState<SessionHistoryItem | null>(null);
+  const [showRefineModal, setShowRefineModal] = useState(false);
+  const [refineFeedback, setRefineFeedback] = useState('');
+  const [refineLoading, setRefineLoading] = useState(false);
+  const [refineError, setRefineError] = useState('');
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -67,6 +73,15 @@ function HistoryPageContent() {
   const searchParams = useSearchParams();
   
   useSessionTimeout();
+  
+  const formatDate = (date: Date | string) => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return dateObj.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
   
   // Set client filter from URL params
   useEffect(() => {
@@ -417,6 +432,101 @@ function HistoryPageContent() {
       });
     }
   };
+
+  const openRefineModal = (session: SessionHistoryItem) => {
+    setRefiningSession(session);
+    setRefineFeedback('');
+    setRefineError('');
+    setShowRefineModal(true);
+  };
+
+  const closeRefineModal = () => {
+    setShowRefineModal(false);
+    setRefiningSession(null);
+    setRefineFeedback('');
+    setRefineError('');
+  };
+
+  const handleRefineSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!refiningSession) return;
+
+    if (!refineFeedback.trim()) {
+      setRefineError('Please provide feedback for refinement');
+      return;
+    }
+
+    setRefineLoading(true);
+    setRefineError('');
+
+    try {
+      // Call OpenAI refinement API
+      const openaiResponse = await fetch('/api/openai/refine', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          currentNote: refiningSession.generatedNote,
+          refinementFeedback: refineFeedback,
+          clientName: refiningSession.client_name,
+          location: refiningSession.location,
+          duration: refiningSession.duration,
+          objectives: refiningSession.objectives,
+          treatmentPlan: refiningSession.treatmentPlan
+        })
+      });
+
+      if (!openaiResponse.ok) {
+        const errorData = await openaiResponse.json();
+        throw new Error(errorData.error || 'Failed to refine note with AI');
+      }
+
+      const openaiResult = await openaiResponse.json();
+      const refinedNote = openaiResult.note;
+
+      // Update session with refined note
+      const updateResponse = await fetch(`/api/sessions/${refiningSession.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          generatedNote: refinedNote
+        })
+      });
+
+      if (updateResponse.ok) {
+        const result = await updateResponse.json();
+        if (result.success && result.data) {
+          // Update session in list
+          setSessions(prev => prev.map(session => 
+            session.id === refiningSession.id ? { ...session, generatedNote: refinedNote } : session
+          ));
+          
+          setNotification({
+            isOpen: true,
+            message: 'Session note refined successfully!',
+            type: 'success'
+          });
+          
+          closeRefineModal();
+        } else {
+          setRefineError('Failed to update session with refined note');
+        }
+      } else {
+        const result = await updateResponse.json();
+        setRefineError(result.error || 'Failed to update session');
+      }
+    } catch (error) {
+      console.error('Error refining session:', error);
+      setRefineError(error instanceof Error ? error.message : 'Failed to refine session. Please try again.');
+    } finally {
+      setRefineLoading(false);
+    }
+  };
   
   if (loading && page === 0) {
     return (
@@ -595,6 +705,7 @@ function HistoryPageContent() {
                     onDelete={handleDeleteSession}
                     onExport={exportSession}
                     onStatusChange={handleQuickStatusChange}
+                    onRefine={openRefineModal}
                     showClientName={true}
                     showUserName={user?.role === 'admin' && viewAllSessions}
                   />
@@ -616,6 +727,122 @@ function HistoryPageContent() {
         </div>
       </main>
       
+      {/* Refine with AI Modal */}
+      {showRefineModal && refiningSession && (
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={closeRefineModal}>
+          <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Refine Session Note with AI
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {refiningSession.client_name} • {formatDate(refiningSession.date)}
+                  </p>
+                </div>
+                <button
+                  onClick={closeRefineModal}
+                  className="text-gray-400 hover:text-gray-600 transition-colors duration-200 p-1 rounded hover:bg-gray-100"
+                  aria-label="Close"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <form onSubmit={handleRefineSubmit} className="space-y-4">
+                {refineError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                    {refineError}
+                  </div>
+                )}
+
+                {/* Current Note Display */}
+                <div>
+                  <label className={styles.label}>Current Session Note</label>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-80 overflow-y-auto">
+                    <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                      {refiningSession.generatedNote}
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    This is your current note. Provide feedback below to have AI refine it.
+                  </p>
+                </div>
+
+                {/* Refinement Feedback */}
+                <div>
+                  <label className={styles.label}>
+                    What would you like to change? *
+                  </label>
+                  <textarea
+                    value={refineFeedback}
+                    onChange={(e) => setRefineFeedback(e.target.value)}
+                    className={`${styles.input} resize-none`}
+                    rows={6}
+                    required
+                    placeholder="Example: 'Add more detail about the client's anxiety coping strategies' or 'Make the activities section more specific with time breakdowns' or 'Emphasize the client's progress in building self-esteem'"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Be specific about what you want to add, change, or improve in the note.
+                  </p>
+                </div>
+
+                {/* Session Context Display */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-2">Session Context</h4>
+                  <div className="text-xs text-blue-800 space-y-1">
+                    <p><strong>Current Session Note:</strong> Included above (full text)</p>
+                    <p><strong>Client:</strong> {refiningSession.client_name}</p>
+                    <p><strong>Duration:</strong> {refiningSession.duration} minutes</p>
+                    <p><strong>Location:</strong> {refiningSession.location}</p>
+                    <p><strong>Objectives:</strong> {refiningSession.objectives.join(', ')}</p>
+                  </div>
+                  <p className="text-xs text-blue-700 mt-2">
+                    AI will use the current session note above, this context, and your feedback to refine the note.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={closeRefineModal}
+                    className={`flex-1 ${styles.button.secondary}`}
+                    disabled={refineLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={refineLoading}
+                    className={`flex-1 ${styles.button.primary} flex items-center justify-center gap-2`}
+                  >
+                    {refineLoading ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Refining with AI...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        Refine with AI
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Session Modal */}
       {showEditForm && editingSession && (
         <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={closeEditForm}>

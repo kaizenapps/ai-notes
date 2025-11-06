@@ -68,7 +68,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     // Parse request body
     const body = await request.json();
-    const { firstName, lastInitial, treatmentPlan, objectivesSelected } = body;
+    const { firstName, lastInitial, treatmentPlan, objectivesSelected, extractedInterventions } = body;
 
     // Validate lastInitial if provided
     if (lastInitial !== undefined && lastInitial.length !== 1) {
@@ -82,7 +82,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       firstName,
       lastInitial: lastInitial?.toUpperCase(),
       treatmentPlan,
-      objectivesSelected
+      objectivesSelected,
+      extractedInterventions
     }, payload.userId);
 
     if (!client) {
