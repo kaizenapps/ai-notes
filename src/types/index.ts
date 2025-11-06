@@ -33,7 +33,6 @@ export interface FormData {
   location: string;
   duration: string;
   objectives: string[];
-  customGoal?: string;
   feedback?: string;
   treatmentPlan?: string;
 }

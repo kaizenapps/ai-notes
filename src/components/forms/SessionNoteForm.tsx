@@ -8,7 +8,6 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ToastNotification } from '@/components/ui/Notification';
 import { styles } from '@/lib/styles';
 import { useSearchParams } from 'next/navigation';
-import { extractInterventionText } from '@/lib/treatmentPlanParser';
 
 function SessionNoteFormContent() {
   const [loading, setLoading] = useState(false);
@@ -46,8 +45,8 @@ function SessionNoteFormContent() {
     if (selectedClientId) {
       const selectedClient = clients.find(client => client.id === selectedClientId);
       if (selectedClient) {
-        // Auto-populate objectives
-        if (selectedClient.objectivesSelected && selectedClient.objectivesSelected.length > 0) {
+        // Auto-populate objectives (only if objectives are loaded)
+        if (selectedClient.objectivesSelected && selectedClient.objectivesSelected.length > 0 && objectives.length > 0) {
           // Convert objective IDs to names for the form
           const objectiveNames = selectedClient.objectivesSelected
             .map(objId => {
@@ -59,8 +58,14 @@ function SessionNoteFormContent() {
           if (objectiveNames.length > 0) {
             setSelectedObjectives(objectiveNames);
             setObjectivesAutoPopulated(true);
+          } else {
+            // Client has objectives but none matched - clear selection
+            setSelectedObjectives([]);
+            setObjectivesAutoPopulated(false);
           }
         } else {
+          // No objectives selected for this client or objectives not loaded yet
+          setSelectedObjectives([]);
           setObjectivesAutoPopulated(false);
         }
         
@@ -68,6 +73,7 @@ function SessionNoteFormContent() {
         setTreatmentPlanText(selectedClient.treatmentPlan || '');
       }
     } else {
+      setSelectedObjectives([]);
       setObjectivesAutoPopulated(false);
       setTreatmentPlanText('');
     }
