@@ -4,9 +4,9 @@ import { verifyToken } from '@/lib/auth';
 import { ApiResponse, MasterSessionTemplate } from '@/types';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return Response.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    const { id } = context.params;
+    const { id } = await context.params;
 
     // Get template by ID
     const template = await templateDb.findById(id);
@@ -68,7 +68,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     // Note: You may want to add role checking here
     // For now, we'll allow any authenticated user to update the template
 
-    const { id } = context.params;
+    const { id } = await context.params;
     const body = await request.json();
     const { name, sections } = body;
 

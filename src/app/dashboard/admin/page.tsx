@@ -456,8 +456,12 @@ export default function AdminPage() {
         } else {
           setFormError('Failed to save client');
         }
+      } else if (activeTab === 'template') {
+        // Template is handled by TemplateManager component, not this form
+        setFormLoading(false);
+        return;
       } else {
-        // Handle lookup item form submission
+        // Handle lookup item form submission (objectives, locations)
         if (!formData.name.trim()) {
           setFormError('Name is required');
           setFormLoading(false);
@@ -478,13 +482,15 @@ export default function AdminPage() {
         }
 
         if (response.success && response.data) {
-          // Update local state
-          setLookupData(prev => ({
-            ...prev,
-            [activeTab]: editingItem 
-              ? prev[activeTab].map(item => item.id === editingItem.id ? response.data : item)
-              : [...prev[activeTab], response.data]
-          }));
+          // Update local state - only for objectives and locations
+          if (activeTab === 'objectives' || activeTab === 'locations') {
+            setLookupData(prev => ({
+              ...prev,
+              [activeTab]: editingItem 
+                ? prev[activeTab].map(item => item.id === editingItem.id ? response.data : item)
+                : [...prev[activeTab], response.data]
+            }));
+          }
           
           // Refresh app context lookup data
           await loadLookupData();
@@ -521,13 +527,16 @@ export default function AdminPage() {
       }
       
       if (response.success) {
-        setLookupData(prev => ({
-          ...prev,
-          [activeTab]: prev[activeTab].filter(i => i.id !== item.id)
-        }));
+        // Only update lookupData for valid tabs (objectives, locations, clients)
+        if (activeTab === 'objectives' || activeTab === 'locations' || activeTab === 'clients') {
+          setLookupData(prev => ({
+            ...prev,
+            [activeTab]: prev[activeTab].filter(i => i.id !== item.id)
+          }));
+        }
         
-        // Refresh app context lookup data if not clients
-        if (activeTab !== 'clients') {
+        // Refresh app context lookup data if not clients or template
+        if (activeTab !== 'clients' && activeTab !== 'template') {
           await loadLookupData();
         }
             
@@ -594,7 +603,10 @@ export default function AdminPage() {
     );
   }
 
-  const currentData = lookupData[activeTab];
+  // Get current data for valid tabs only (template and users have their own components)
+  const currentData = (activeTab === 'objectives' || activeTab === 'locations' || activeTab === 'clients')
+    ? lookupData[activeTab]
+    : [];
   const tabLabels = {
     users: 'User Management',
     clients: 'Client Management',
@@ -641,8 +653,10 @@ export default function AdminPage() {
                     ? userCount 
                     : key === 'template'
                     ? ''
-                    : (Array.isArray(lookupData[key as keyof LookupData]) 
-                        ? lookupData[key as keyof LookupData].length 
+                    : (key === 'objectives' || key === 'locations' || key === 'clients'
+                        ? (Array.isArray(lookupData[key as keyof LookupData]) 
+                            ? lookupData[key as keyof LookupData].length 
+                            : 0)
                         : 0);
                   return (
                   <button
