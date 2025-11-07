@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import OpenAI from 'openai';
 import { applyComplianceFilters } from '@/lib/security';
 import { templateDb } from '@/lib/database';
+import { MasterSessionTemplate, TemplateSection } from '@/types';
 
 function getOpenAIClient() {
   if (!process.env.OPENAI_API_KEY) {
@@ -101,7 +102,7 @@ function replacePlaceholders(text: string, data: SessionData): string {
   return result;
 }
 
-async function buildPrompt(data: SessionData, template: any): Promise<string> {
+async function buildPrompt(data: SessionData, template: MasterSessionTemplate | null): Promise<string> {
   // If no template, use default format (backward compatibility)
   if (!template || !template.sections || template.sections.length === 0) {
     return buildDefaultPrompt(data);
@@ -124,10 +125,10 @@ async function buildPrompt(data: SessionData, template: any): Promise<string> {
   
   // Build output format from template sections
   const visibleSections = template.sections
-    .filter((s: any) => s.isVisible)
-    .sort((a: any, b: any) => a.order - b.order);
+    .filter((s: TemplateSection) => s.isVisible)
+    .sort((a: TemplateSection, b: TemplateSection) => a.order - b.order);
 
-  const outputFormat = visibleSections.map((section: any) => {
+  const outputFormat = visibleSections.map((section: TemplateSection) => {
     const instructions = replacePlaceholders(section.instructions, data);
     return `${section.heading}\n[${instructions}]`;
   }).join('\n\n');

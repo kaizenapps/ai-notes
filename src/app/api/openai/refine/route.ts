@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import OpenAI from 'openai';
 import { applyComplianceFilters } from '@/lib/security';
 import { templateDb } from '@/lib/database';
+import { MasterSessionTemplate, TemplateSection } from '@/types';
 
 function getOpenAIClient() {
   if (!process.env.OPENAI_API_KEY) {
@@ -77,27 +78,7 @@ interface RefineData {
   selectedInterventions?: string[]; // Selected interventions for this session
 }
 
-// Helper function to replace placeholders in text
-function replacePlaceholders(text: string, data: RefineData): string {
-  const replacements: Record<string, string> = {
-    '{{clientName}}': data.clientName || 'Client',
-    '{{location}}': data.location || '',
-    '{{duration}}': data.duration ? data.duration.toString() : '',
-    '{{objectives}}': data.objectives && data.objectives.length > 0 ? data.objectives.join(', ') : '',
-    '{{treatmentPlan}}': data.treatmentPlan || '',
-    '{{selectedInterventions}}': data.selectedInterventions && data.selectedInterventions.length > 0
-      ? data.selectedInterventions.map((i, idx) => `${idx + 1}. ${i}`).join('\n')
-      : ''
-  };
-
-  let result = text;
-  for (const [placeholder, value] of Object.entries(replacements)) {
-    result = result.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value);
-  }
-  return result;
-}
-
-async function buildRefinementPrompt(data: RefineData, template: any): Promise<string> {
+async function buildRefinementPrompt(data: RefineData, template: MasterSessionTemplate | null): Promise<string> {
   // Build interventions section
   const interventionsSection = data.selectedInterventions && data.selectedInterventions.length > 0
     ? `\n- Selected Interventions for This Session:\n  ${data.selectedInterventions.map((i, idx) => `${idx + 1}. ${i}`).join('\n  ')}`
@@ -123,10 +104,10 @@ ${data.objectives && data.objectives.length > 0 ? `- Objectives: ${data.objectiv
   let templateStructureNote = '';
   if (template && template.sections && template.sections.length > 0) {
     const visibleSections = template.sections
-      .filter((s: any) => s.isVisible)
-      .sort((a: any, b: any) => a.order - b.order);
+      .filter((s: TemplateSection) => s.isVisible)
+      .sort((a: TemplateSection, b: TemplateSection) => a.order - b.order);
     
-    templateStructureNote = `\n\nTEMPLATE STRUCTURE (maintain this structure in your refined note):\n${visibleSections.map((s: any) => s.heading).join('\n')}\n\nIMPORTANT: The refined note must follow this exact section structure and order.`;
+    templateStructureNote = `\n\nTEMPLATE STRUCTURE (maintain this structure in your refined note):\n${visibleSections.map((s: TemplateSection) => s.heading).join('\n')}\n\nIMPORTANT: The refined note must follow this exact section structure and order.`;
   } else {
     templateStructureNote = '\n\nIMPORTANT: Keep the original note structure and format (Location, Focus, Activities, Interventions, Patient Response, Plan).';
   }

@@ -6,7 +6,6 @@ import { generateSessionNote } from '@/lib/openai';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ToastNotification } from '@/components/ui/Notification';
-import { apiPost } from '@/lib/api';
 import { styles } from '@/lib/styles';
 import { useSearchParams } from 'next/navigation';
 
@@ -32,7 +31,7 @@ function SessionNoteFormContent() {
   });
   // Intervention selection state
   const [selectedInterventions, setSelectedInterventions] = useState<string[]>([]);
-  const { clients, locations, objectives, setClients } = useApp();
+  const { clients, locations, objectives } = useApp();
   const searchParams = useSearchParams();
 
   // Pre-select client from URL params
@@ -385,7 +384,7 @@ function SessionNoteFormContent() {
         <div>
           <label className={styles.label}>Treatment Plan (Session-Specific)</label>
           <p className="text-xs text-gray-600 mb-2">
-            Treatment plan is auto-populated from client profile for reference. You can edit it here for this session only - changes will NOT affect the client's treatment plan.
+            Treatment plan is auto-populated from client profile for reference. You can edit it here for this session only - changes will NOT affect the client&apos;s treatment plan.
           </p>
           <textarea 
             name="treatmentPlan"
@@ -397,7 +396,7 @@ function SessionNoteFormContent() {
           />
           {treatmentPlanText && (
             <p className="text-xs text-blue-600 mt-1">
-              💡 This treatment plan is only for this session and will not update the client's profile.
+              💡 This treatment plan is only for this session and will not update the client&apos;s profile.
             </p>
           )}
         </div>
@@ -442,7 +441,7 @@ function SessionNoteFormContent() {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-yellow-800 mb-1">No interventions available</p>
                       <p className="text-xs text-yellow-700">
-                        This client doesn't have any Peer Support Interventions extracted yet. Please go to{' '}
+                        This client doesn&apos;t have any Peer Support Interventions extracted yet. Please go to{' '}
                         <span className="font-semibold">Client Management</span> in the admin dashboard to extract interventions from the treatment plan.
                       </p>
                     </div>

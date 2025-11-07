@@ -204,7 +204,7 @@ export function TemplateManager() {
 
           {template.sections
             .sort((a, b) => a.order - b.order)
-            .map((section, index) => {
+            .map((section) => {
               const originalIndex = template.sections.findIndex(s => s.name === section.name);
               return (
                 <div key={section.name} className="border border-gray-200 rounded-lg p-4 bg-gray-50">

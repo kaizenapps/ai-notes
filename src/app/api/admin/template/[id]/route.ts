@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { templateDb } from '@/lib/database';
 import { verifyToken } from '@/lib/auth';
-import { ApiResponse, MasterSessionTemplate, TemplateSection } from '@/types';
+import { ApiResponse, MasterSessionTemplate } from '@/types';
 
 interface RouteContext {
   params: {
