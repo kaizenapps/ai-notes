@@ -96,6 +96,8 @@ export async function POST(request: NextRequest) {
       locationOther,
       generatedNote,
       customFeedback,
+      treatmentPlan,
+      selectedInterventions,
       status,
       objectives
     } = body;
@@ -123,6 +125,8 @@ export async function POST(request: NextRequest) {
       locationOther,
       generatedNote,
       customFeedback,
+      treatmentPlan: treatmentPlan || null,
+      selectedInterventions: selectedInterventions || [],
       status: status || 'draft',
       objectives: objectives.map((obj: { id?: string; custom?: string; name?: string }) => ({
         id: obj.id,

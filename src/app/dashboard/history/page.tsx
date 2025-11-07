@@ -20,6 +20,7 @@ interface SessionHistoryItem extends Omit<SessionNote, 'date' | 'createdAt'> {
   date: Date | string;
   createdAt: Date | string;
   treatmentPlan?: string;
+  selectedInterventions?: string[];
 }
 
 function HistoryPageContent() {
@@ -474,7 +475,8 @@ function HistoryPageContent() {
           location: refiningSession.location,
           duration: refiningSession.duration,
           objectives: refiningSession.objectives,
-          treatmentPlan: refiningSession.treatmentPlan
+          treatmentPlan: refiningSession.treatmentPlan,
+          selectedInterventions: refiningSession.selectedInterventions || []
         })
       });
 
@@ -799,9 +801,15 @@ function HistoryPageContent() {
                     <p><strong>Duration:</strong> {refiningSession.duration} minutes</p>
                     <p><strong>Location:</strong> {refiningSession.location}</p>
                     <p><strong>Objectives:</strong> {refiningSession.objectives.join(', ')}</p>
+                    {refiningSession.treatmentPlan && refiningSession.treatmentPlan.trim() && (
+                      <p><strong>Treatment Plan for This Session:</strong> {refiningSession.treatmentPlan.substring(0, 100)}{refiningSession.treatmentPlan.length > 100 ? '...' : ''}</p>
+                    )}
+                    {refiningSession.selectedInterventions && refiningSession.selectedInterventions.length > 0 && (
+                      <p><strong>Selected Interventions:</strong> {refiningSession.selectedInterventions.join(', ')}</p>
+                    )}
                   </div>
                   <p className="text-xs text-blue-700 mt-2">
-                    AI will use the current session note above, this context, and your feedback to refine the note.
+                    AI will use the current session note above, this context (including selected interventions and treatment plan), and your feedback to refine the note.
                   </p>
                 </div>
 

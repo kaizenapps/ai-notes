@@ -9,6 +9,7 @@ import { styles } from '@/lib/styles';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { Client as ClientType } from '@/types';
 import { UserManager } from '@/components/admin/UserManager';
+import { TemplateManager } from '@/components/admin/TemplateManager';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ToastNotification } from '@/components/ui/Notification';
@@ -47,7 +48,7 @@ export default function AdminPage() {
     users: []
   });
   const [userCount, setUserCount] = useState(0);
-  const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'objectives' | 'locations'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'objectives' | 'locations' | 'template'>('users');
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState<LookupItem | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -340,7 +341,7 @@ export default function AdminPage() {
         }));
         setNotification({
           isOpen: true,
-          message: `Successfully extracted ${response.interventions.length} interventions`,
+          message: `Successfully extracted ${response.interventions.length} interventions. All interventions are saved to the client profile.`,
           type: 'success'
         });
       } else {
@@ -432,7 +433,7 @@ export default function AdminPage() {
           lastInitial: clientFormData.lastInitial.trim().toUpperCase(),
           treatmentPlan: clientFormData.treatmentPlan.trim(),
           objectivesSelected: clientFormData.objectivesSelected,
-          extractedInterventions: clientFormData.extractedInterventions
+          extractedInterventions: clientFormData.extractedInterventions // Always save all extracted interventions
         };
 
         let response;
@@ -598,7 +599,8 @@ export default function AdminPage() {
     users: 'User Management',
     clients: 'Client Management',
     objectives: 'Goals and Objectives',
-    locations: 'Session Locations'
+    locations: 'Session Locations',
+    template: 'Master Session Note'
   };
 
   return (
@@ -633,23 +635,26 @@ export default function AdminPage() {
               <nav className="-mb-px flex space-x-8">
                 {Object.entries(tabLabels).map(([key, label]) => {
                   // For users tab, use the separate userCount state
+                  // For template tab, show no count
                   // For other tabs, use lookupData
                   const count = key === 'users' 
                     ? userCount 
+                    : key === 'template'
+                    ? ''
                     : (Array.isArray(lookupData[key as keyof LookupData]) 
                         ? lookupData[key as keyof LookupData].length 
                         : 0);
                   return (
                   <button
                     key={key}
-                    onClick={() => setActiveTab(key as keyof LookupData)}
+                    onClick={() => setActiveTab(key as 'users' | 'clients' | 'objectives' | 'locations' | 'template')}
                     className={`py-2 px-1 border-b-2 font-medium text-sm ${
                       activeTab === key
                         ? 'border-blue-500 text-blue-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
-                      {label} ({count})
+                      {label}{count !== '' ? ` (${count})` : ''}
                   </button>
                   );
                 })}
@@ -658,7 +663,7 @@ export default function AdminPage() {
           </div>
 
           {/* Action Bar (hidden for tabs that render their own headings) */}
-          {activeTab !== 'users' ? (
+          {activeTab !== 'users' && activeTab !== 'template' ? (
             <div className="flex justify-between items-center mb-6">
               <div>
                 <p className="text-sm text-gray-600">
@@ -679,6 +684,8 @@ export default function AdminPage() {
           {/* Content Area */}
           {activeTab === 'users' ? (
             <UserManager />
+          ) : activeTab === 'template' ? (
+            <TemplateManager />
           ) : currentData.length === 0 ? (
             <div className={`${styles.card} text-center py-12`}>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -809,7 +816,7 @@ Intervention 1: [category] - [description]`}
                         <div>
                           <label className={styles.label}>Peer Support Interventions</label>
                           <p className="text-xs text-gray-600 mt-1">
-                            AI-extracted interventions from treatment plan. These will be included in session notes.
+                            AI-extracted interventions from treatment plan. All extracted interventions are saved to the client profile and will be available for selection in session notes.
                           </p>
                         </div>
                         <button

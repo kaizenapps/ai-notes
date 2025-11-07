@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from 'pg';
-import { User, Client, SessionNote } from '@/types';
+import { User, Client, SessionNote, MasterSessionTemplate, TemplateSection } from '@/types';
 
 
 // Create connection pool
@@ -368,6 +368,8 @@ export const sessionDb = {
     locationOther?: string;
     generatedNote: string;
     customFeedback?: string;
+    treatmentPlan?: string;
+    selectedInterventions?: string[];
     status?: 'draft' | 'completed' | 'archived';
     objectives: Array<{ id?: string; custom?: string }>;
   }): Promise<SessionNote> {
@@ -385,12 +387,14 @@ export const sessionDb = {
       try {
         // Insert session note
         const sessionResult = await client.query(
-          `INSERT INTO session_notes (client_id, user_id, session_date, duration_minutes, location_id, location_other, generated_note, custom_feedback, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `INSERT INTO session_notes (client_id, user_id, session_date, duration_minutes, location_id, location_other, generated_note, custom_feedback, treatment_plan, selected_interventions, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id, client_id as "clientId", user_id as "userId", session_date as date, duration_minutes as duration, 
-                     location_other as location, generated_note as "generatedNote", custom_feedback as feedback, status, created_at as "createdAt"`,
+                     location_other as location, generated_note as "generatedNote", custom_feedback as feedback, 
+                     treatment_plan as "treatmentPlan", COALESCE(selected_interventions, '{}') as "selectedInterventions", status, created_at as "createdAt"`,
           [sessionData.clientId, sessionData.userId, sessionData.sessionDate, sessionData.duration, 
-           sessionData.locationId, sessionData.locationOther, sessionData.generatedNote, sessionData.customFeedback, sessionData.status || 'draft']
+           sessionData.locationId, sessionData.locationOther, sessionData.generatedNote, sessionData.customFeedback, 
+           sessionData.treatmentPlan || null, sessionData.selectedInterventions || [], sessionData.status || 'draft']
         );
         
         const session = sessionResult.rows[0];
@@ -420,7 +424,7 @@ export const sessionDb = {
         return {
           ...session,
           objectives,
-          interventions: [] // Interventions are now auto-extracted from treatment plan
+          selectedInterventions: session.selectedInterventions || []
         };
       } catch (error) {
         await client.query('ROLLBACK');
@@ -437,6 +441,8 @@ export const sessionDb = {
                 sn.session_date as date, sn.duration_minutes as duration,
                 COALESCE(sl.name, sn.location_other) as location,
                 sn.generated_note as "generatedNote", sn.custom_feedback as feedback,
+                sn.treatment_plan as "treatmentPlan",
+                COALESCE(sn.selected_interventions, '{}') as "selectedInterventions",
                 sn.status, sn.created_at as "createdAt",
                 c.first_name || ' ' || c.last_initial || '.' as client_name,
                 u.username as user_name
@@ -480,7 +486,7 @@ export const sessionDb = {
         return {
           ...session,
           objectives: objectivesResult.rows.map(row => row.name),
-          interventions: [] // Interventions are auto-extracted from treatment plan
+          selectedInterventions: session.selectedInterventions || []
         };
       }));
       
@@ -507,6 +513,8 @@ export const sessionDb = {
                 sn.session_date as date, sn.duration_minutes as duration,
                 COALESCE(sl.name, sn.location_other) as location,
                 sn.generated_note as "generatedNote", sn.custom_feedback as feedback,
+                sn.treatment_plan as "treatmentPlan",
+                COALESCE(sn.selected_interventions, '{}') as "selectedInterventions",
                 sn.status, sn.created_at as "createdAt",
                 c.first_name || ' ' || c.last_initial || '.' as client_name,
                 u.username as user_name
@@ -533,7 +541,7 @@ export const sessionDb = {
         return {
           ...session,
           objectives: objectivesResult.rows.map(row => row.name),
-          interventions: [] // Interventions are auto-extracted from treatment plan
+          selectedInterventions: session.selectedInterventions || []
         };
       }));
       
@@ -550,6 +558,8 @@ export const sessionDb = {
       locationOther?: string;
       generatedNote?: string;
       customFeedback?: string;
+      treatmentPlan?: string;
+      selectedInterventions?: string[];
       status?: 'draft' | 'completed' | 'archived';
       objectives?: Array<{ id?: string; custom?: string }>;
     },
@@ -590,6 +600,14 @@ export const sessionDb = {
         if (sessionData.customFeedback !== undefined) {
           setClauses.push(`custom_feedback = $${paramCount++}`);
           values.push(sessionData.customFeedback);
+        }
+        if (sessionData.treatmentPlan !== undefined) {
+          setClauses.push(`treatment_plan = $${paramCount++}`);
+          values.push(sessionData.treatmentPlan);
+        }
+        if (sessionData.selectedInterventions !== undefined) {
+          setClauses.push(`selected_interventions = $${paramCount++}`);
+          values.push(sessionData.selectedInterventions);
         }
         if (sessionData.status !== undefined) {
           setClauses.push(`status = $${paramCount++}`);
@@ -684,6 +702,8 @@ export const sessionDb = {
                 sn.session_date as date, sn.duration_minutes as duration,
                 COALESCE(sl.name, sn.location_other) as location,
                 sn.generated_note as "generatedNote", sn.custom_feedback as feedback,
+                sn.treatment_plan as "treatmentPlan",
+                COALESCE(sn.selected_interventions, '{}') as "selectedInterventions",
                 sn.status, sn.created_at as "createdAt"
          FROM session_notes sn
          LEFT JOIN session_locations sl ON sn.location_id = sl.id
@@ -695,7 +715,7 @@ export const sessionDb = {
       
       const session = result.rows[0];
       
-      // Get objectives and interventions
+      // Get objectives
       const objectivesResult = await client.query(
         `SELECT COALESCE(obj.name, so.custom_objective) as name
          FROM session_objectives so
@@ -707,7 +727,7 @@ export const sessionDb = {
       return {
         ...session,
         objectives: objectivesResult.rows.map(row => row.name),
-        interventions: [] // Interventions are auto-extracted from treatment plan
+        selectedInterventions: session.selectedInterventions || []
       };
     });
   }
@@ -737,6 +757,92 @@ export const lookupDb = {
 };
 
 // Health check
+// Master Session Template database operations
+export const templateDb = {
+  async findActive(): Promise<MasterSessionTemplate | null> {
+    return withDatabase(async (client) => {
+      const result = await client.query(
+        `SELECT id, name, sections, is_active as "isActive", 
+                created_at as "createdAt", updated_at as "updatedAt"
+         FROM master_session_templates 
+         WHERE is_active = true 
+         ORDER BY created_at DESC 
+         LIMIT 1`
+      );
+
+      if (!result.rows[0]) return null;
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        name: row.name,
+        sections: row.sections || [],
+        isActive: row.isActive,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt
+      };
+    });
+  },
+
+  async findById(id: string): Promise<MasterSessionTemplate | null> {
+    return withDatabase(async (client) => {
+      const result = await client.query(
+        `SELECT id, name, sections, is_active as "isActive", 
+                created_at as "createdAt", updated_at as "updatedAt"
+         FROM master_session_templates 
+         WHERE id = $1`,
+        [id]
+      );
+
+      if (!result.rows[0]) return null;
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        name: row.name,
+        sections: row.sections || [],
+        isActive: row.isActive,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt
+      };
+    });
+  },
+
+  async update(id: string, templateData: {
+    name?: string;
+    sections?: TemplateSection[];
+  }): Promise<MasterSessionTemplate | null> {
+    return withDatabase(async (client) => {
+      const setClauses = [];
+      const values = [];
+      let paramCount = 1;
+
+      if (templateData.name !== undefined) {
+        setClauses.push(`name = $${paramCount++}`);
+        values.push(templateData.name);
+      }
+      if (templateData.sections !== undefined) {
+        setClauses.push(`sections = $${paramCount++}::jsonb`);
+        values.push(JSON.stringify(templateData.sections));
+      }
+
+      if (setClauses.length === 0) {
+        return await this.findById(id);
+      }
+
+      values.push(id);
+      await client.query(
+        `UPDATE master_session_templates 
+         SET ${setClauses.join(', ')}, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $${paramCount}`,
+        values
+      );
+
+      return await this.findById(id);
+    });
+  }
+};
+
 export async function checkDatabaseConnection(): Promise<boolean> {
   try {
     return await withDatabase(async (client) => {

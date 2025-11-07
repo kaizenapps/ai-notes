@@ -6,7 +6,6 @@ import { generateSessionNote } from '@/lib/openai';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ToastNotification } from '@/components/ui/Notification';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { apiPost } from '@/lib/api';
 import { styles } from '@/lib/styles';
 import { useSearchParams } from 'next/navigation';
@@ -31,23 +30,8 @@ function SessionNoteFormContent() {
     message: '',
     type: 'info'
   });
-  // Intervention management state
-  const [localInterventions, setLocalInterventions] = useState<string[]>([]);
-  const [extractingInterventions, setExtractingInterventions] = useState(false);
-  const [extractionError, setExtractionError] = useState('');
-  const [editingInterventionIndex, setEditingInterventionIndex] = useState<number | null>(null);
-  const [editingInterventionText, setEditingInterventionText] = useState('');
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: () => {}
-  });
+  // Intervention selection state
+  const [selectedInterventions, setSelectedInterventions] = useState<string[]>([]);
   const { clients, locations, objectives, setClients } = useApp();
   const searchParams = useSearchParams();
 
@@ -90,14 +74,14 @@ function SessionNoteFormContent() {
         
         // Auto-populate treatment plan
         setTreatmentPlanText(selectedClient.treatmentPlan || '');
-        // Auto-populate interventions (local state for editing)
-        setLocalInterventions(selectedClient.extractedInterventions || []);
+        // Initialize selected interventions (empty - user will select)
+        setSelectedInterventions([]);
       }
     } else {
       setSelectedObjectives([]);
       setObjectivesAutoPopulated(false);
       setTreatmentPlanText('');
-      setLocalInterventions([]);
+      setSelectedInterventions([]);
     }
   }, [selectedClientId, clients, objectives]);
 
@@ -156,49 +140,7 @@ function SessionNoteFormContent() {
         return;
       }
       
-      // Save/update treatment plan and interventions to client if they were modified
-      const needsUpdate = 
-        treatmentPlanText.trim() !== (selectedClient.treatmentPlan || '') ||
-        JSON.stringify(localInterventions) !== JSON.stringify(selectedClient.extractedInterventions || []);
-      
-      if (needsUpdate) {
-        try {
-          const updateResponse = await fetch(`/api/clients/${clientIdValue}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify({
-              treatmentPlan: treatmentPlanText.trim(),
-              extractedInterventions: localInterventions
-            })
-          });
-          
-          if (updateResponse.ok) {
-            console.log('Treatment plan and interventions updated for client');
-            // Refresh clients list to get updated data
-            try {
-              const clientsResponse = await fetch('/api/clients', {
-                headers: {
-                  'Authorization': `Bearer ${localStorage.getItem('token')}`
-                }
-              });
-              if (clientsResponse.ok) {
-                const clientsResult = await clientsResponse.json();
-                if (clientsResult.success && clientsResult.data) {
-                  setClients(clientsResult.data);
-                }
-              }
-            } catch (refreshError) {
-              console.warn('Failed to refresh clients:', refreshError);
-            }
-          }
-        } catch (updateError) {
-          console.warn('Failed to update client data:', updateError);
-          // Continue anyway - session note generation shouldn't fail
-        }
-      }
+      // Treatment plan is now session-specific, not saved to client
 
       // Format client name: "FirstName LastInitial."
       const clientName = `${selectedClient.firstName} ${selectedClient.lastInitial}.`;
@@ -211,7 +153,7 @@ function SessionNoteFormContent() {
         objectives: selectedObjectives, // MultiSelect uses controlled state (correct)
         feedback: feedbackValue, // Use value from form, not state
         treatmentPlan: treatmentPlanText.trim(), // Textarea uses controlled state (correct)
-        interventions: localInterventions, // Use local interventions state (can be edited)
+        interventions: selectedInterventions, // Selected interventions for this session
       };
 
       const note = await generateSessionNote(sessionData);
@@ -235,6 +177,8 @@ function SessionNoteFormContent() {
             customFeedback: sessionData.feedback,
             status: 'completed', // New sessions are completed when generated
             objectives: selectedObjectives.map(obj => ({ custom: obj })),
+            selectedInterventions: selectedInterventions,
+            treatmentPlan: treatmentPlanText.trim(), // Session-specific treatment plan
           })
         });
         
@@ -265,88 +209,13 @@ function SessionNoteFormContent() {
     });
   };
 
-  // Intervention extraction and management handlers
-  const handleExtractInterventions = async () => {
-    if (!treatmentPlanText.trim()) {
-      setExtractionError('Please enter a treatment plan before extracting interventions');
-      return;
-    }
-
-    // If interventions already exist, show warning
-    if (localInterventions.length > 0) {
-      setConfirmDialog({
-        isOpen: true,
-        title: 'Re-extract Interventions?',
-        message: 'This will replace existing interventions. Are you sure you want to continue?',
-        onConfirm: async () => {
-          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-          await performExtraction();
-        }
-      });
-      return;
-    }
-
-    await performExtraction();
-  };
-
-  const performExtraction = async () => {
-    setExtractingInterventions(true);
-    setExtractionError('');
-
-    try {
-      const response = await apiPost<{ success: boolean; interventions: string[] }>('/clients/extract-interventions', {
-        treatmentPlan: treatmentPlanText,
-        objectives: selectedObjectives
-      });
-
-      if (response.success && response.interventions) {
-        setLocalInterventions(response.interventions);
-        setNotification({
-          isOpen: true,
-          message: `Successfully extracted ${response.interventions.length} interventions`,
-          type: 'success'
-        });
-      } else {
-        setExtractionError('Failed to extract interventions');
-      }
-    } catch (error) {
-      console.error('Error extracting interventions:', error);
-      setExtractionError('Failed to extract interventions. Please try again.');
-    } finally {
-      setExtractingInterventions(false);
-    }
-  };
-
-  const handleAddIntervention = () => {
-    const newIntervention = '[Category] - [Description]';
-    setLocalInterventions(prev => [...prev, newIntervention]);
-    // Start editing the new intervention immediately
-    setEditingInterventionIndex(localInterventions.length);
-    setEditingInterventionText(newIntervention);
-  };
-
-  const handleDeleteIntervention = (index: number) => {
-    setLocalInterventions(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleStartEditIntervention = (index: number) => {
-    setEditingInterventionIndex(index);
-    setEditingInterventionText(localInterventions[index]);
-  };
-
-  const handleSaveEditIntervention = () => {
-    if (editingInterventionIndex !== null) {
-      setLocalInterventions(prev =>
-        prev.map((int, i) => i === editingInterventionIndex ? editingInterventionText : int)
-      );
-      setEditingInterventionIndex(null);
-      setEditingInterventionText('');
-    }
-  };
-
-  const handleCancelEditIntervention = () => {
-    setEditingInterventionIndex(null);
-    setEditingInterventionText('');
+  // Intervention selection handler
+  const handleToggleIntervention = (intervention: string) => {
+    setSelectedInterventions(prev => 
+      prev.includes(intervention)
+        ? prev.filter(i => i !== intervention)
+        : [...prev, intervention]
+    );
   };
 
   const exportSession = async (format: 'pdf' | 'docx' | 'txt') => {
@@ -514,9 +383,9 @@ function SessionNoteFormContent() {
         
         {/* Treatment Plan */}
         <div>
-          <label className={styles.label}>Treatment Plan</label>
+          <label className={styles.label}>Treatment Plan (Session-Specific)</label>
           <p className="text-xs text-gray-600 mb-2">
-            Treatment plan is auto-populated from client profile. You can edit it here and changes will be saved to the client profile when you generate the note.
+            Treatment plan is auto-populated from client profile for reference. You can edit it here for this session only - changes will NOT affect the client's treatment plan.
           </p>
           <textarea 
             name="treatmentPlan"
@@ -524,160 +393,65 @@ function SessionNoteFormContent() {
             onChange={(e) => setTreatmentPlanText(e.target.value)}
             className={`${styles.input} resize-none`}
             rows={8}
-            placeholder="Treatment plan will appear here when client is selected. Edit to update client profile."
+            placeholder="Treatment plan will appear here when client is selected. Edit for this session only."
           />
           {treatmentPlanText && (
             <p className="text-xs text-blue-600 mt-1">
-              💡 Changes will be saved to client profile when you generate the note.
+              💡 This treatment plan is only for this session and will not update the client's profile.
             </p>
           )}
         </div>
 
-        {/* Interventions Section - Editable */}
-        {selectedClientId && (
-          <div className="border-t border-gray-200 pt-5">
-            <div className="flex items-center justify-between mb-3">
+        {/* Interventions Section - Checkbox Selection */}
+        {selectedClientId && (() => {
+          const selectedClient = clients.find(c => c.id === selectedClientId);
+          const availableInterventions = selectedClient?.extractedInterventions || [];
+          
+          return (
+            <div className="border-t border-gray-200 pt-5">
               <div>
                 <label className={styles.label}>Peer Support Interventions</label>
                 <p className="text-xs text-gray-600 mt-1">
-                  AI-extracted interventions from treatment plan. These will be included in session notes.
+                  Select which interventions were used in this session. These will be included in the generated note.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleExtractInterventions}
-                disabled={extractingInterventions || !treatmentPlanText.trim()}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${
-                  extractingInterventions || !treatmentPlanText.trim()
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-purple-600 hover:bg-purple-700'
-                }`}
-              >
-                {extractingInterventions ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Extracting...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                    </svg>
-                    Extract Interventions with AI
-                  </>
-                )}
-              </button>
-            </div>
 
-            {extractionError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm mb-3">
-                {extractionError}
-              </div>
-            )}
-
-            {localInterventions.length > 0 ? (
-              <div className="space-y-2">
-                {localInterventions.map((intervention, index) => (
-                  <div key={index} className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                    {editingInterventionIndex === index ? (
-                      <div className="flex-1 flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={editingInterventionText}
-                          onChange={(e) => setEditingInterventionText(e.target.value)}
-                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="[Category] - [Description]"
-                          autoFocus
-                        />
-                        <button
-                          type="button"
-                          onClick={handleSaveEditIntervention}
-                          className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
-                          title="Save"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCancelEditIntervention}
-                          className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                          title="Cancel"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <span className="flex-1 text-sm text-gray-900">{intervention}</span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleStartEditIntervention(index)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="Edit"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteIntervention(index)}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Delete"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </>
-                    )}
+              {availableInterventions.length > 0 ? (
+                <div className="mt-3 space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  {availableInterventions.map((intervention, index) => (
+                    <label
+                      key={index}
+                      className="flex items-start gap-3 p-2 rounded hover:bg-gray-100 cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedInterventions.includes(intervention)}
+                        onChange={() => handleToggleIntervention(intervention)}
+                        className="mt-1 h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                      />
+                      <span className="flex-1 text-sm text-gray-900">{intervention}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-yellow-800 mb-1">No interventions available</p>
+                      <p className="text-xs text-yellow-700">
+                        This client doesn't have any Peer Support Interventions extracted yet. Please go to{' '}
+                        <span className="font-semibold">Client Management</span> in the admin dashboard to extract interventions from the treatment plan.
+                      </p>
+                    </div>
                   </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={handleAddIntervention}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add Custom Intervention
-                </button>
-              </div>
-            ) : (
-              <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                <svg className="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-                <p className="text-sm text-gray-600 mb-3">No interventions extracted yet</p>
-                <p className="text-xs text-gray-500 mb-4">
-                  {treatmentPlanText.trim() 
-                    ? 'Click "Extract Interventions with AI" to analyze the treatment plan'
-                    : 'Enter a treatment plan first, then extract interventions'}
-                </p>
-                <button
-                  type="button"
-                  onClick={handleAddIntervention}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add Manually
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         
         {/* Additional Feedback */}
         <div>
@@ -703,10 +477,7 @@ function SessionNoteFormContent() {
               setGeneratedNote('');
               setLastSessionId(null);
               setObjectivesAutoPopulated(false);
-              setLocalInterventions([]);
-              setExtractionError('');
-              setEditingInterventionIndex(null);
-              setEditingInterventionText('');
+              setSelectedInterventions([]);
             }}
             className={styles.button.secondary}
           >
@@ -788,18 +559,6 @@ function SessionNoteFormContent() {
         message={notification.message}
         type={notification.type}
         onClose={() => setNotification(prev => ({ ...prev, isOpen: false }))}
-      />
-      
-      {/* Confirm Dialog */}
-      <ConfirmDialog
-        isOpen={confirmDialog.isOpen}
-        title={confirmDialog.title}
-        message={confirmDialog.message}
-        confirmText="Yes, Replace"
-        cancelText="Cancel"
-        confirmVariant="primary"
-        onConfirm={confirmDialog.onConfirm}
-        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
       />
     </div>
   );

@@ -24,6 +24,8 @@ export interface SessionNote {
   objectives: string[];
   generatedNote: string;
   feedback?: string;
+  treatmentPlan?: string; // Treatment plan specific to this session (not linked to client)
+  selectedInterventions?: string[]; // Interventions selected for this session
   status?: 'draft' | 'completed' | 'archived';
   createdAt: Date;
 }
@@ -42,4 +44,22 @@ export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+}
+
+export interface TemplateSection {
+  name: string;
+  heading: string;
+  instructions: string;
+  placeholders: string[];
+  isVisible: boolean;
+  order: number;
+}
+
+export interface MasterSessionTemplate {
+  id: string;
+  name: string;
+  sections: TemplateSection[];
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
