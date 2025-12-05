@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "system",
-          content: "You are an expert at analyzing treatment plans for PEER SUPPORT services (NOT clinical therapy). Your role is to identify 3-5 specific peer support interventions that are ACTUALLY MENTIONED OR CLEARLY IMPLIED in the treatment plan. CRITICAL RULES: 1) This is for PEER SUPPORT SPECIALISTS - NOT therapists or counselors. 2) ONLY extract interventions that are explicitly stated or directly implied in the treatment plan - DO NOT invent or make up interventions that aren't there. 3) If an intervention mentions therapy, counseling, or clinical treatment, translate it to peer support language. 4) Use the format: '[Category] - [Specific description]' where Category is peer-support focused."
+          content: "You are an expert at analyzing treatment plans for PEER SUPPORT services (NOT clinical therapy). Your role is to suggest 3-5 specific peer support interventions that would help achieve the goals in the treatment plan. CRITICAL RULES: 1) This is for PEER SUPPORT SPECIALISTS - NOT therapists or counselors. 2) Base interventions on the goals and objectives mentioned in the treatment plan. 3) If the treatment plan only lists goals without specific interventions, suggest appropriate peer support activities that would help achieve those goals. 4) Use peer support language (not clinical/therapy terms). 5) Use the format: '[Category] - [Specific description]' where Category is peer-support focused. 6) ALWAYS provide at least 3 relevant interventions based on the treatment plan goals."
         },
         { role: "user", content: prompt }
       ],
@@ -89,24 +89,20 @@ interface ExtractionData {
 }
 
 function buildExtractionPrompt(data: ExtractionData): string {
-  return `Analyze the following treatment plan and extract 3-5 specific PEER SUPPORT interventions.
+  return `Analyze the following treatment plan and suggest 3-5 specific PEER SUPPORT interventions that would help achieve the stated goals.
 
 IMPORTANT CONTEXT:
 - This is for a PEER SUPPORT SPECIALIST (NOT a therapist or counselor)
 - Peer support specialists use lived experience and mutual support, NOT clinical therapy
-- Focus on peer support activities like: mentoring, sharing experiences, goal-setting, resource navigation, mutual support, skill-building workshops, etc.
+- Focus on peer support activities like: mentoring, sharing experiences, goal-setting, resource navigation, mutual support, skill-building workshops, coping strategies, etc.
 
 TREATMENT PLAN:
 ${data.treatmentPlan}
 
-CRITICAL INSTRUCTIONS:
-1. ONLY extract interventions that are ACTUALLY MENTIONED or CLEARLY IMPLIED in the treatment plan above
-2. DO NOT invent or make up interventions that are not in the document
-3. If the treatment plan mentions clinical/therapy terms, translate them to peer support equivalents:
-   - "therapy sessions" → "peer support sessions"
-   - "counseling" → "peer mentoring"
-   - "treatment" → "support activities"
-   - "clinical assessment" → "peer check-in"
+INSTRUCTIONS:
+1. Read the goals and objectives in the treatment plan
+2. Suggest 3-5 peer support interventions that would help achieve those goals
+3. If the treatment plan mentions clinical/therapy terms, translate them to peer support equivalents
 4. Focus on practical, actionable peer support activities
 5. Each intervention should be formatted as: "[Category] - [Specific description]"
 6. Categories should be peer support focused:
@@ -114,24 +110,23 @@ CRITICAL INSTRUCTIONS:
    - Mutual Support
    - Goal-Setting
    - Recovery Support
-   - Parenting Skills
-   - Educational Support
    - Coping Skills Development
    - Social Support Building
    - Resource Navigation
    - Skill Building
-7. If fewer than 3 clear interventions are found, only return what is actually in the plan
-8. DO NOT add generic interventions like "group sessions" unless specifically mentioned
+   - Wellness Activities
+   - Communication Skills
 
 EXAMPLES OF GOOD FORMAT:
-- "Peer Mentoring - Weekly one-on-one support sessions focused on recovery goals"
-- "Coping Skills Development - Breathing exercises and grounding techniques"
-- "Goal-Setting - SMART goal development and weekly progress tracking"
-- "Parenting Skills - Peer discussions on managing challenging behaviors"
+- "Coping Skills Development - Practice breathing exercises and grounding techniques for anxiety management"
+- "Goal-Setting - Develop weekly wellness goals and track progress together"
+- "Peer Mentoring - Weekly one-on-one support sessions focused on mental health wellness"
+- "Mutual Support - Share experiences and strategies for managing daily challenges"
+- "Wellness Activities - Engage in stress-reducing activities like walks or mindfulness exercises"
 
 OUTPUT:
 Return ONLY the intervention list, one per line, formatted as shown above.
 Do not include explanations, numbering, or additional text.
-If an intervention is not clearly in the treatment plan, DO NOT include it.`;
+ALWAYS provide at least 3 interventions that relate to the goals in the treatment plan.`;
 }
 
