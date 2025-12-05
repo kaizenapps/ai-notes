@@ -59,7 +59,10 @@ export default function AdminPage() {
   });
   const [clientFormData, setClientFormData] = useState({
     firstName: '',
-    lastInitial: '',
+    lastName: '',
+    gender: '' as '' | 'male' | 'female',
+    address: '',
+    dateOfBirth: '',
     treatmentPlan: '',
     objectivesSelected: [] as string[],
     extractedInterventions: [] as string[]
@@ -149,7 +152,17 @@ export default function AdminPage() {
             sortable: true,
             render: (value, item) => (
               <span className="font-medium text-gray-900">
-                {String(value)} {(item as Client).lastInitial}.
+                {String(value)} {(item as Client).lastName || (item as Client).lastInitial + '.'}
+              </span>
+            )
+          },
+          {
+            key: 'gender',
+            label: 'Gender',
+            sortable: true,
+            render: (value) => (
+              <span className="text-gray-600 capitalize">
+                {value ? String(value) : '-'}
               </span>
             )
           },
@@ -263,7 +276,10 @@ export default function AdminPage() {
         setEditingClient(client);
         setClientFormData({
           firstName: client.firstName,
-          lastInitial: client.lastInitial,
+          lastName: client.lastName || '',
+          gender: (client.gender as '' | 'male' | 'female') || '',
+          address: client.address || '',
+          dateOfBirth: client.dateOfBirth || '',
           treatmentPlan: client.treatmentPlan || '',
           objectivesSelected: client.objectivesSelected || [],
           extractedInterventions: client.extractedInterventions || []
@@ -272,7 +288,10 @@ export default function AdminPage() {
         setEditingClient(null);
         setClientFormData({
           firstName: '',
-          lastInitial: '',
+          lastName: '',
+          gender: '',
+          address: '',
+          dateOfBirth: '',
           treatmentPlan: '',
           objectivesSelected: [],
           extractedInterventions: []
@@ -401,7 +420,7 @@ export default function AdminPage() {
     setEditingItem(null);
     setEditingClient(null);
     setFormData({ name: '', category: '', description: '' });
-    setClientFormData({ firstName: '', lastInitial: '', treatmentPlan: '', objectivesSelected: [], extractedInterventions: [] });
+    setClientFormData({ firstName: '', lastName: '', gender: '', address: '', dateOfBirth: '', treatmentPlan: '', objectivesSelected: [], extractedInterventions: [] });
     setFormError('');
     setExtractionError('');
     setEditingInterventionIndex(null);
@@ -422,15 +441,19 @@ export default function AdminPage() {
           return;
         }
 
-        if (!clientFormData.lastInitial.trim() || clientFormData.lastInitial.length !== 1) {
-          setFormError('Last initial must be a single letter');
+        if (!clientFormData.lastName.trim()) {
+          setFormError('Last name is required');
           setFormLoading(false);
           return;
         }
 
         const clientData = {
           firstName: clientFormData.firstName.trim(),
-          lastInitial: clientFormData.lastInitial.trim().toUpperCase(),
+          lastName: clientFormData.lastName.trim(),
+          lastInitial: clientFormData.lastName.trim().charAt(0).toUpperCase(), // Auto-derive from lastName
+          gender: clientFormData.gender || null,
+          address: clientFormData.address.trim() || null,
+          dateOfBirth: clientFormData.dateOfBirth || null,
           treatmentPlan: clientFormData.treatmentPlan.trim(),
           objectivesSelected: clientFormData.objectivesSelected,
           extractedInterventions: clientFormData.extractedInterventions // Always save all extracted interventions
@@ -779,31 +802,74 @@ export default function AdminPage() {
 
                 {activeTab === 'clients' ? (
                   <>
-                    <div>
-                      <label className={styles.label}>First Name *</label>
-                      <input
-                        type="text"
-                        value={clientFormData.firstName}
-                        onChange={(e) => setClientFormData(prev => ({ ...prev, firstName: e.target.value }))}
-                        className={styles.input}
-                        placeholder="Enter first name"
-                        required
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={styles.label}>First Name *</label>
+                        <input
+                          type="text"
+                          value={clientFormData.firstName}
+                          onChange={(e) => setClientFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                          className={styles.input}
+                          placeholder="Enter first name"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className={styles.label}>Last Name *</label>
+                        <input
+                          type="text"
+                          value={clientFormData.lastName}
+                          onChange={(e) => setClientFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                          className={styles.input}
+                          placeholder="Enter last name"
+                          required
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Only first name is used in generated notes
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={styles.label}>Gender</label>
+                        <select
+                          value={clientFormData.gender}
+                          onChange={(e) => setClientFormData(prev => ({ ...prev, gender: e.target.value as '' | 'male' | 'female' }))}
+                          className={styles.select}
+                        >
+                          <option value="">Select gender...</option>
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Used for AI pronoun generation (he/she)
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className={styles.label}>Date of Birth</label>
+                        <input
+                          type="date"
+                          value={clientFormData.dateOfBirth}
+                          onChange={(e) => setClientFormData(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                          className={styles.input}
+                        />
+                      </div>
                     </div>
 
                     <div>
-                      <label className={styles.label}>Last Initial *</label>
-                      <input
-                        type="text"
-                        value={clientFormData.lastInitial}
-                        onChange={(e) => setClientFormData(prev => ({ ...prev, lastInitial: e.target.value.slice(0, 1) }))}
-                        className={styles.input}
-                        placeholder="Enter last initial"
-                        maxLength={1}
-                        required
+                      <label className={styles.label}>Address</label>
+                      <textarea
+                        value={clientFormData.address}
+                        onChange={(e) => setClientFormData(prev => ({ ...prev, address: e.target.value }))}
+                        className={`${styles.input} resize-none`}
+                        rows={2}
+                        placeholder="Enter client's home address"
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        HIPAA Compliance: Only store the first letter of last name
+                        Used for location context (e.g., &quot;Client&apos;s Home&quot;). Address is not shown in session notes.
                       </p>
                     </div>
 

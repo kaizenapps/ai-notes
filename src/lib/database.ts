@@ -234,8 +234,9 @@ export const clientDb = {
     return withDatabase(async (client) => {
       await setAuditUser(client, userId);
       const result = await client.query(
-        `SELECT id, first_name as "firstName", last_initial as "lastInitial", 
-         treatment_plan as "treatmentPlan", 
+        `SELECT id, first_name as "firstName", last_initial as "lastInitial",
+         last_name as "lastName", gender, address, date_of_birth as "dateOfBirth",
+         treatment_plan as "treatmentPlan",
          COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
          COALESCE(extracted_interventions, '{}') as "extractedInterventions"
          FROM clients WHERE is_active = true ORDER BY first_name, last_initial`
@@ -243,6 +244,7 @@ export const clientDb = {
       // Parse JSON strings to arrays
       return result.rows.map(row => ({
         ...row,
+        dateOfBirth: row.dateOfBirth ? row.dateOfBirth.toISOString().split('T')[0] : null,
         objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
         extractedInterventions: row.extractedInterventions || []
       }));
@@ -253,7 +255,8 @@ export const clientDb = {
     return withDatabase(async (client) => {
       await setAuditUser(client, userId);
       const result = await client.query(
-        `SELECT id, first_name as "firstName", last_initial as "lastInitial", 
+        `SELECT id, first_name as "firstName", last_initial as "lastInitial",
+         last_name as "lastName", gender, address, date_of_birth as "dateOfBirth",
          treatment_plan as "treatmentPlan",
          COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
          COALESCE(extracted_interventions, '{}') as "extractedInterventions"
@@ -265,6 +268,7 @@ export const clientDb = {
       const row = result.rows[0];
       return {
         ...row,
+        dateOfBirth: row.dateOfBirth ? row.dateOfBirth.toISOString().split('T')[0] : null,
         objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
         extractedInterventions: row.extractedInterventions || []
       };
@@ -274,6 +278,10 @@ export const clientDb = {
   async create(clientData: {
     firstName: string;
     lastInitial: string;
+    lastName?: string;
+    gender?: 'male' | 'female';
+    address?: string;
+    dateOfBirth?: string;
     treatmentPlan?: string;
     objectivesSelected?: string[];
     extractedInterventions?: string[];
@@ -283,17 +291,21 @@ export const clientDb = {
       await setAuditUser(client, clientData.createdBy);
       const objectivesJson = clientData.objectivesSelected ? JSON.stringify(clientData.objectivesSelected) : '[]';
       const result = await client.query(
-        `INSERT INTO clients (first_name, last_initial, treatment_plan, objectives_selected, extracted_interventions, created_by)
-         VALUES ($1, $2, $3, $4::jsonb, $5, $6)
-         RETURNING id, first_name as "firstName", last_initial as "lastInitial", 
-         treatment_plan as "treatmentPlan", 
+        `INSERT INTO clients (first_name, last_initial, last_name, gender, address, date_of_birth, treatment_plan, objectives_selected, extracted_interventions, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)
+         RETURNING id, first_name as "firstName", last_initial as "lastInitial",
+         last_name as "lastName", gender, address, date_of_birth as "dateOfBirth",
+         treatment_plan as "treatmentPlan",
          COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
          COALESCE(extracted_interventions, '{}') as "extractedInterventions"`,
-        [clientData.firstName, clientData.lastInitial, clientData.treatmentPlan, objectivesJson, clientData.extractedInterventions || [], clientData.createdBy]
+        [clientData.firstName, clientData.lastInitial, clientData.lastName || null, clientData.gender || null,
+         clientData.address || null, clientData.dateOfBirth || null, clientData.treatmentPlan,
+         objectivesJson, clientData.extractedInterventions || [], clientData.createdBy]
       );
       const row = result.rows[0];
       return {
         ...row,
+        dateOfBirth: row.dateOfBirth ? row.dateOfBirth.toISOString().split('T')[0] : null,
         objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
         extractedInterventions: row.extractedInterventions || []
       };
@@ -303,6 +315,10 @@ export const clientDb = {
   async update(id: string, clientData: {
     firstName?: string;
     lastInitial?: string;
+    lastName?: string;
+    gender?: 'male' | 'female' | null;
+    address?: string;
+    dateOfBirth?: string | null;
     treatmentPlan?: string;
     objectivesSelected?: string[];
     extractedInterventions?: string[];
@@ -320,6 +336,22 @@ export const clientDb = {
       if (clientData.lastInitial !== undefined) {
         setClauses.push(`last_initial = $${paramCount++}`);
         values.push(clientData.lastInitial);
+      }
+      if (clientData.lastName !== undefined) {
+        setClauses.push(`last_name = $${paramCount++}`);
+        values.push(clientData.lastName);
+      }
+      if (clientData.gender !== undefined) {
+        setClauses.push(`gender = $${paramCount++}`);
+        values.push(clientData.gender);
+      }
+      if (clientData.address !== undefined) {
+        setClauses.push(`address = $${paramCount++}`);
+        values.push(clientData.address);
+      }
+      if (clientData.dateOfBirth !== undefined) {
+        setClauses.push(`date_of_birth = $${paramCount++}`);
+        values.push(clientData.dateOfBirth);
       }
       if (clientData.treatmentPlan !== undefined) {
         setClauses.push(`treatment_plan = $${paramCount++}`);
@@ -340,7 +372,8 @@ export const clientDb = {
       const result = await client.query(
         `UPDATE clients SET ${setClauses.join(', ')}, updated_at = CURRENT_TIMESTAMP
          WHERE id = $${paramCount} AND is_active = true
-         RETURNING id, first_name as "firstName", last_initial as "lastInitial", 
+         RETURNING id, first_name as "firstName", last_initial as "lastInitial",
+         last_name as "lastName", gender, address, date_of_birth as "dateOfBirth",
          treatment_plan as "treatmentPlan",
          COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
          COALESCE(extracted_interventions, '{}') as "extractedInterventions"`,
@@ -350,6 +383,7 @@ export const clientDb = {
       const row = result.rows[0];
       return {
         ...row,
+        dateOfBirth: row.dateOfBirth ? row.dateOfBirth.toISOString().split('T')[0] : null,
         objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
         extractedInterventions: row.extractedInterventions || []
       };

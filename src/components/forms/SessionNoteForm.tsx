@@ -141,12 +141,13 @@ function SessionNoteFormContent() {
       
       // Treatment plan is now session-specific, not saved to client
 
-      // Format client name: "FirstName LastInitial."
-      const clientName = `${selectedClient.firstName} ${selectedClient.lastInitial}.`;
+      // Format client name: First name only (per client request)
+      const clientName = selectedClient.firstName;
 
       const sessionData = {
         clientId: clientIdValue, // Use value from form, not state
-        clientName: clientName, // Format: "FirstName LastInitial." (e.g., "Dark T.")
+        clientName: clientName, // First name only (e.g., "Sarah")
+        clientGender: selectedClient.gender || null, // Gender for pronoun usage (he/she)
         location: locationValue, // Use value from form, not state
         duration: durationValue, // Use value from form, not state
         objectives: selectedObjectives, // MultiSelect uses controlled state (correct)

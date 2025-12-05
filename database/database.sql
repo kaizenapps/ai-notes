@@ -39,11 +39,15 @@ CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
 -- ============================================================================
 -- CLIENTS TABLE
 -- ============================================================================
--- Stores client information (HIPAA-compliant: first name + last initial only)
+-- Stores client information
 CREATE TABLE IF NOT EXISTS clients (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     first_name VARCHAR(100) NOT NULL,
     last_initial VARCHAR(1) NOT NULL,
+    last_name VARCHAR(100),
+    gender VARCHAR(10) CHECK (gender IN ('male', 'female')),
+    address TEXT,
+    date_of_birth DATE,
     treatment_plan TEXT,
     objectives_selected JSONB DEFAULT '[]'::jsonb,
     extracted_interventions TEXT[] DEFAULT '{}',
@@ -59,10 +63,15 @@ CREATE INDEX IF NOT EXISTS idx_clients_is_active ON clients(is_active);
 CREATE INDEX IF NOT EXISTS idx_clients_created_by ON clients(created_by);
 CREATE INDEX IF NOT EXISTS idx_clients_objectives_selected ON clients USING GIN (objectives_selected);
 CREATE INDEX IF NOT EXISTS idx_clients_extracted_interventions ON clients USING GIN (extracted_interventions);
+CREATE INDEX IF NOT EXISTS idx_clients_gender ON clients(gender);
 
 -- Comments for documentation
 COMMENT ON COLUMN clients.objectives_selected IS 'Array of objective IDs pre-selected for this client profile';
 COMMENT ON COLUMN clients.extracted_interventions IS 'AI-extracted peer support interventions from treatment plan. Format: "[Category] - [Description]"';
+COMMENT ON COLUMN clients.gender IS 'Client gender (male/female) - used for AI pronoun generation';
+COMMENT ON COLUMN clients.address IS 'Client home address - used for location context, not displayed in session notes';
+COMMENT ON COLUMN clients.date_of_birth IS 'Client date of birth';
+COMMENT ON COLUMN clients.last_name IS 'Client full last name';
 
 -- ============================================================================
 -- SESSION LOCATIONS TABLE
@@ -79,6 +88,11 @@ CREATE TABLE IF NOT EXISTS session_locations (
 -- Indexes for session_locations
 CREATE INDEX IF NOT EXISTS idx_session_locations_name ON session_locations(name);
 CREATE INDEX IF NOT EXISTS idx_session_locations_is_active ON session_locations(is_active);
+
+-- Default location: Client's Home
+INSERT INTO session_locations (name, description, is_active)
+SELECT 'Client''s Home', 'Session conducted at the client''s residence', true
+WHERE NOT EXISTS (SELECT 1 FROM session_locations WHERE name = 'Client''s Home');
 
 -- ============================================================================
 -- TREATMENT OBJECTIVES TABLE
@@ -185,15 +199,15 @@ VALUES (
         {
             "name": "focus",
             "heading": "Focus of the Meeting:",
-            "instructions": "Describe the primary focus based on the session objectives. Reference the treatment plan for this session if provided. Be specific about what was addressed in this session.",
+            "instructions": "Describe the primary focus of this peer support session. Explain what the session addressed and why it was important for the client. Reference the treatment plan if provided. Be specific and narrative - do not list goals or objectives separately.",
             "placeholders": ["{{objectives}}", "{{treatmentPlan}}"],
             "isVisible": true,
             "order": 2
         },
         {
             "name": "activities",
-            "heading": "Activities (time-based breakdown):",
-            "instructions": "Break down activities by time segments. Include: Opening/check-in period, Main activities aligned with objectives, Closing/summary period. Use specific time ranges based on the {{duration}}-minute duration. Include line breaks between each time segment.",
+            "heading": "Session Activities:",
+            "instructions": "Provide a DETAILED and ROBUST breakdown of all activities during the {{duration}}-minute session. Be very descriptive and specific. Include: 1) Opening/check-in (first 5-10 minutes): How did the session start? What was discussed? 2) Main Activities: Describe EACH activity in detail - what was done, how it was done, what materials or techniques were used. Include play activities, interactive exercises, discussions, skill-building activities, games, creative activities, role-playing, or any other engagement methods used. 3) Closing (last 5-10 minutes): How did the session wrap up? What was summarized? Use specific time ranges (e.g., 0-10 min, 10-30 min, etc.). Be thorough and paint a clear picture of what happened during the session.",
             "placeholders": ["{{duration}}", "{{objectives}}"],
             "isVisible": true,
             "order": 3
@@ -208,8 +222,8 @@ VALUES (
         },
         {
             "name": "patientResponse",
-            "heading": "Patient Response/Content:",
-            "instructions": "Describe how the client engaged with the session, their responses, participation level, any insights shared, progress observed, and their feedback. IMPORTANT: Use the client''s name {{clientName}} exactly as provided. Do NOT use generic names like \"J.\", \"R.\", or other initials unless that is the actual client''s name. Be specific and factual.",
+            "heading": "Client Response:",
+            "instructions": "Describe how the client engaged with the session, their responses, participation level, any insights shared, progress observed, and their feedback. IMPORTANT: Use ONLY the client''s first name {{clientName}} - never use last names or full names. Be specific and factual about the client''s engagement and any notable responses or behaviors.",
             "placeholders": ["{{clientName}}"],
             "isVisible": true,
             "order": 5
@@ -217,7 +231,7 @@ VALUES (
         {
             "name": "nextSession",
             "heading": "Plan for Next Session:",
-            "instructions": "Based on the session objectives and the treatment plan for this session if provided, outline what should be addressed in the next session. Reference the treatment plan goals from this session if applicable. Keep it focused and actionable.",
+            "instructions": "Based on what was covered in this session and the treatment plan if provided, outline what should be addressed in the next session. Keep it focused and actionable - describe specific activities or topics to cover.",
             "placeholders": ["{{objectives}}", "{{treatmentPlan}}"],
             "isVisible": true,
             "order": 6

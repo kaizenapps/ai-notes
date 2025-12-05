@@ -54,26 +54,41 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { firstName, lastInitial, treatmentPlan, objectivesSelected, extractedInterventions } = body;
+    const { firstName, lastInitial, lastName, gender, address, dateOfBirth, treatmentPlan, objectivesSelected, extractedInterventions } = body;
 
     // Validate required fields
-    if (!firstName || !lastInitial) {
-      return Response.json({ 
-        error: 'Missing required fields: firstName, lastInitial' 
+    if (!firstName) {
+      return Response.json({
+        error: 'Missing required field: firstName'
       }, { status: 400 });
     }
 
-    // Validate lastInitial is single character
-    if (lastInitial.length !== 1) {
-      return Response.json({ 
-        error: 'lastInitial must be a single character' 
+    // Determine lastInitial - derive from lastName if not provided directly
+    let finalLastInitial = lastInitial;
+    if (!finalLastInitial && lastName) {
+      finalLastInitial = lastName.charAt(0).toUpperCase();
+    }
+    if (!finalLastInitial) {
+      return Response.json({
+        error: 'Either lastInitial or lastName must be provided'
+      }, { status: 400 });
+    }
+
+    // Validate gender if provided
+    if (gender && !['male', 'female'].includes(gender)) {
+      return Response.json({
+        error: 'Gender must be either "male" or "female"'
       }, { status: 400 });
     }
 
     // Create client in database
     const client = await clientDb.create({
       firstName,
-      lastInitial: lastInitial.toUpperCase(),
+      lastInitial: finalLastInitial.toUpperCase(),
+      lastName: lastName || null,
+      gender: gender || null,
+      address: address || null,
+      dateOfBirth: dateOfBirth || null,
       treatmentPlan,
       objectivesSelected: objectivesSelected || [],
       extractedInterventions: extractedInterventions || [],

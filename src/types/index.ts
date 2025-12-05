@@ -8,7 +8,11 @@ export interface User {
 export interface Client {
   id: string;
   firstName: string;
-  lastInitial: string; // HIPAA: Only store initials
+  lastInitial: string; // Legacy field - kept for backward compatibility
+  lastName?: string; // Full last name (only first name used in generated notes)
+  gender?: 'male' | 'female'; // Used for AI pronoun generation (he/she)
+  address?: string; // Client home address - for location context, not shown in notes
+  dateOfBirth?: string; // Client date of birth (ISO date string)
   treatmentPlan?: string;
   objectivesSelected?: string[]; // Array of objective IDs selected for this client
   extractedInterventions?: string[]; // AI-extracted interventions from treatment plan
@@ -32,12 +36,14 @@ export interface SessionNote {
 
 export interface FormData {
   clientId: string;
-  clientName?: string; // Format: "FirstName LastInitial." (e.g., "Dark T.")
+  clientName?: string; // First name only (e.g., "Sarah")
+  clientGender?: 'male' | 'female' | null; // Gender for AI pronoun usage (he/she)
   location: string;
   duration: string;
   objectives: string[];
   feedback?: string;
   treatmentPlan?: string;
+  interventions?: string[]; // Selected peer support interventions for this session
 }
 
 export interface ApiResponse<T> {

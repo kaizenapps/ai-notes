@@ -68,19 +68,29 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     // Parse request body
     const body = await request.json();
-    const { firstName, lastInitial, treatmentPlan, objectivesSelected, extractedInterventions } = body;
+    const { firstName, lastInitial, lastName, gender, address, dateOfBirth, treatmentPlan, objectivesSelected, extractedInterventions } = body;
 
-    // Validate lastInitial if provided
-    if (lastInitial !== undefined && lastInitial.length !== 1) {
-      return Response.json({ 
-        error: 'lastInitial must be a single character' 
+    // Validate gender if provided
+    if (gender !== undefined && gender !== null && !['male', 'female'].includes(gender)) {
+      return Response.json({
+        error: 'Gender must be either "male" or "female"'
       }, { status: 400 });
+    }
+
+    // Derive lastInitial from lastName if lastName is provided but lastInitial isn't
+    let finalLastInitial = lastInitial;
+    if (lastName && !lastInitial) {
+      finalLastInitial = lastName.charAt(0).toUpperCase();
     }
 
     // Update client in database
     const client = await clientDb.update(params.id, {
       firstName,
-      lastInitial: lastInitial?.toUpperCase(),
+      lastInitial: finalLastInitial?.toUpperCase(),
+      lastName,
+      gender,
+      address,
+      dateOfBirth,
       treatmentPlan,
       objectivesSelected,
       extractedInterventions
