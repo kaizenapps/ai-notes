@@ -17,7 +17,6 @@ interface AppContextType {
   clients: Client[];
   setClients: (clients: Client[]) => void;
   locations: LookupItem[];
-  objectives: LookupItem[];
   loadLookupData: () => Promise<void>;
   resetTimeout: () => void;
 }
@@ -28,7 +27,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [locations, setLocations] = useState<LookupItem[]>([]);
-  const [objectives, setObjectives] = useState<LookupItem[]>([]);
   const sessionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Load lookup data from API
@@ -37,17 +35,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await apiGet<{ 
-        success: boolean; 
-        data: { 
-          locations: LookupItem[]; 
-          objectives: LookupItem[]; 
-        } 
+      const response = await apiGet<{
+        success: boolean;
+        data: {
+          locations: LookupItem[];
+        }
       }>('/lookup');
-      
+
       if (response.success && response.data) {
         setLocations(response.data.locations);
-        setObjectives(response.data.objectives);
       }
     } catch (error) {
       console.warn('Failed to load lookup data, using fallbacks:', error);
@@ -57,11 +53,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         { id: '2', name: 'Telehealth' },
         { id: '3', name: 'Community' },
         { id: '4', name: 'Office' }
-      ]);
-      setObjectives([
-        { id: '1', name: 'Improve coping skills' },
-        { id: '2', name: 'Manage anxiety symptoms' },
-        { id: '3', name: 'Build self-esteem' }
       ]);
     }
   }, []);
@@ -97,13 +88,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
   
   return (
-    <AppContext.Provider value={{ 
-      user, setUser, 
+    <AppContext.Provider value={{
+      user, setUser,
       clients, setClients,
       locations,
-      objectives,
       loadLookupData,
-      resetTimeout 
+      resetTimeout
     }}>
       {children}
     </AppContext.Provider>

@@ -218,21 +218,6 @@ export function SessionCard({
 
       {/* Content */}
       <div className="p-6">
-        {/* Objectives */}
-        <div className="mb-4">
-          <h4 className="text-sm font-medium text-gray-900 mb-2">Objectives</h4>
-          <div className="flex flex-wrap gap-1">
-            {session.objectives.map((objective, index) => (
-              <span
-                key={index}
-                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-              >
-                {objective}
-              </span>
-            ))}
-          </div>
-        </div>
-
         {/* Session Notes */}
         <div className="mb-4">
           <h4 className="text-sm font-medium text-gray-900 mb-2">Session Notes</h4>

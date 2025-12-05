@@ -27,7 +27,6 @@ interface LookupItem {
 
 interface LookupData {
   locations: LookupItem[];
-  objectives: LookupItem[];
   clients: Client[];
   users: never[]; // Users are handled by UserManager component
 }
@@ -43,12 +42,11 @@ export default function AdminPage() {
   const [error, setError] = useState('');
   const [lookupData, setLookupData] = useState<LookupData>({
     locations: [],
-    objectives: [],
     clients: [],
     users: []
   });
   const [userCount, setUserCount] = useState(0);
-  const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'objectives' | 'locations' | 'template'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'locations' | 'template'>('users');
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState<LookupItem | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -64,7 +62,6 @@ export default function AdminPage() {
     address: '',
     dateOfBirth: '',
     treatmentPlan: '',
-    objectivesSelected: [] as string[],
     extractedInterventions: [] as string[]
   });
   const [formLoading, setFormLoading] = useState(false);
@@ -106,33 +103,6 @@ export default function AdminPage() {
             label: 'Location Name',
             sortable: true,
             render: (value) => <span className="font-medium text-gray-900">{String(value)}</span>
-          },
-          {
-            key: 'description',
-            label: 'Description',
-            sortable: true,
-            render: (value) => {
-              const displayValue = value && value !== 'undefined' && value !== 'null' ? String(value) : '';
-              return <span className="text-gray-600">{displayValue || '-'}</span>;
-            }
-          }
-        ];
-      case 'objectives':
-        return [
-          {
-            key: 'name',
-            label: 'Objective',
-            sortable: true,
-            render: (value) => <span className="font-medium text-gray-900">{String(value)}</span>
-          },
-          {
-            key: 'category',
-            label: 'Category',
-            sortable: true,
-            render: (value) => {
-              const displayValue = value && value !== 'undefined' && value !== 'null' ? String(value) : '';
-              return <span className="text-gray-600">{displayValue || '-'}</span>;
-            }
           },
           {
             key: 'description',
@@ -281,7 +251,6 @@ export default function AdminPage() {
           address: client.address || '',
           dateOfBirth: client.dateOfBirth || '',
           treatmentPlan: client.treatmentPlan || '',
-          objectivesSelected: client.objectivesSelected || [],
           extractedInterventions: client.extractedInterventions || []
         });
       } else {
@@ -293,7 +262,6 @@ export default function AdminPage() {
           address: '',
           dateOfBirth: '',
           treatmentPlan: '',
-          objectivesSelected: [],
           extractedInterventions: []
         });
       }
@@ -349,8 +317,7 @@ export default function AdminPage() {
 
     try {
       const response = await apiPost<{ success: boolean; interventions: string[] }>('/clients/extract-interventions', {
-        treatmentPlan: clientFormData.treatmentPlan,
-        objectives: clientFormData.objectivesSelected
+        treatmentPlan: clientFormData.treatmentPlan
       });
 
       if (response.success && response.interventions) {
@@ -420,7 +387,7 @@ export default function AdminPage() {
     setEditingItem(null);
     setEditingClient(null);
     setFormData({ name: '', category: '', description: '' });
-    setClientFormData({ firstName: '', lastName: '', gender: '', address: '', dateOfBirth: '', treatmentPlan: '', objectivesSelected: [], extractedInterventions: [] });
+    setClientFormData({ firstName: '', lastName: '', gender: '', address: '', dateOfBirth: '', treatmentPlan: '', extractedInterventions: [] });
     setFormError('');
     setExtractionError('');
     setEditingInterventionIndex(null);
@@ -455,7 +422,6 @@ export default function AdminPage() {
           address: clientFormData.address.trim() || null,
           dateOfBirth: clientFormData.dateOfBirth || null,
           treatmentPlan: clientFormData.treatmentPlan.trim(),
-          objectivesSelected: clientFormData.objectivesSelected,
           extractedInterventions: clientFormData.extractedInterventions // Always save all extracted interventions
         };
 
@@ -505,8 +471,8 @@ export default function AdminPage() {
         }
 
         if (response.success && response.data) {
-          // Update local state - only for objectives and locations
-          if (activeTab === 'objectives' || activeTab === 'locations') {
+          // Update local state - only for locations
+          if (activeTab === 'locations') {
             setLookupData(prev => ({
               ...prev,
               [activeTab]: editingItem 
@@ -550,8 +516,8 @@ export default function AdminPage() {
       }
       
       if (response.success) {
-        // Only update lookupData for valid tabs (objectives, locations, clients)
-        if (activeTab === 'objectives' || activeTab === 'locations' || activeTab === 'clients') {
+        // Only update lookupData for valid tabs (locations, clients)
+        if (activeTab === 'locations' || activeTab === 'clients') {
           setLookupData(prev => ({
             ...prev,
             [activeTab]: prev[activeTab].filter(i => i.id !== item.id)
@@ -627,13 +593,12 @@ export default function AdminPage() {
   }
 
   // Get current data for valid tabs only (template and users have their own components)
-  const currentData = (activeTab === 'objectives' || activeTab === 'locations' || activeTab === 'clients')
+  const currentData = (activeTab === 'locations' || activeTab === 'clients')
     ? lookupData[activeTab]
     : [];
   const tabLabels = {
     users: 'User Management',
     clients: 'Client Management',
-    objectives: 'Goals and Objectives',
     locations: 'Session Locations',
     template: 'Master Session Note'
   };
@@ -672,19 +637,19 @@ export default function AdminPage() {
                   // For users tab, use the separate userCount state
                   // For template tab, show no count
                   // For other tabs, use lookupData
-                  const count = key === 'users' 
-                    ? userCount 
+                  const count = key === 'users'
+                    ? userCount
                     : key === 'template'
                     ? ''
-                    : (key === 'objectives' || key === 'locations' || key === 'clients'
-                        ? (Array.isArray(lookupData[key as keyof LookupData]) 
-                            ? lookupData[key as keyof LookupData].length 
+                    : (key === 'locations' || key === 'clients'
+                        ? (Array.isArray(lookupData[key as keyof LookupData])
+                            ? lookupData[key as keyof LookupData].length
                             : 0)
                         : 0);
                   return (
                   <button
                     key={key}
-                    onClick={() => setActiveTab(key as 'users' | 'clients' | 'objectives' | 'locations' | 'template')}
+                    onClick={() => setActiveTab(key as 'users' | 'clients' | 'locations' | 'template')}
                     className={`py-2 px-1 border-b-2 font-medium text-sm ${
                       activeTab === key
                         ? 'border-blue-500 text-blue-600'
@@ -1032,22 +997,6 @@ Intervention 1: [category] - [description]`}
                           </button>
                         </div>
                       )}
-                    </div>
-
-                    <div className="relative">
-                      <label className={styles.label}>Goals & Objectives *</label>
-                      <p className="text-xs text-gray-600 mb-2">
-                        Select the objectives that apply to this client. These will be pre-populated for all future sessions.
-                      </p>
-                      <div className="relative z-10">
-                        <MultiSelect
-                          name="objectivesSelected"
-                          options={lookupData.objectives.map(obj => ({ value: obj.id, label: obj.name }))}
-                          placeholder="Select objectives for this client..."
-                          value={clientFormData.objectivesSelected}
-                          onChange={(selected) => setClientFormData(prev => ({ ...prev, objectivesSelected: selected }))}
-                        />
-                      </div>
                     </div>
                   </>
                 ) : (

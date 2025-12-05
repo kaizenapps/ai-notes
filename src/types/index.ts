@@ -13,8 +13,7 @@ export interface Client {
   gender?: 'male' | 'female'; // Used for AI pronoun generation (he/she)
   address?: string; // Client home address - for location context, not shown in notes
   dateOfBirth?: string; // Client date of birth (ISO date string)
-  treatmentPlan?: string;
-  objectivesSelected?: string[]; // Array of objective IDs selected for this client
+  treatmentPlan?: string; // Required for session note generation
   extractedInterventions?: string[]; // AI-extracted interventions from treatment plan
 }
 
@@ -25,10 +24,9 @@ export interface SessionNote {
   date: Date;
   duration: number; // in minutes
   location: string;
-  objectives: string[];
   generatedNote: string;
   feedback?: string;
-  treatmentPlan?: string; // Treatment plan specific to this session (not linked to client)
+  treatmentPlan: string; // Required - treatment plan for this session
   selectedInterventions?: string[]; // Interventions selected for this session
   status?: 'draft' | 'completed' | 'archived';
   createdAt: Date;
@@ -40,9 +38,8 @@ export interface FormData {
   clientGender?: 'male' | 'female' | null; // Gender for AI pronoun usage (he/she)
   location: string;
   duration: string;
-  objectives: string[];
   feedback?: string;
-  treatmentPlan?: string;
+  treatmentPlan: string; // Required - treatment plan for this session
   interventions?: string[]; // Selected peer support interventions for this session
 }
 

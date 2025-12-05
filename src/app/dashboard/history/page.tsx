@@ -800,7 +800,6 @@ function HistoryPageContent() {
                     <p><strong>Client:</strong> {refiningSession.client_name}</p>
                     <p><strong>Duration:</strong> {refiningSession.duration} minutes</p>
                     <p><strong>Location:</strong> {refiningSession.location}</p>
-                    <p><strong>Objectives:</strong> {refiningSession.objectives.join(', ')}</p>
                     {refiningSession.treatmentPlan && refiningSession.treatmentPlan.trim() && (
                       <p><strong>Treatment Plan for This Session:</strong> {refiningSession.treatmentPlan.substring(0, 100)}{refiningSession.treatmentPlan.length > 100 ? '...' : ''}</p>
                     )}

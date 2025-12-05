@@ -30,11 +30,11 @@ export async function POST(request: NextRequest) {
   if (!data.duration || data.duration.trim() === '') {
     return Response.json({ error: 'Duration is required' }, { status: 400 });
   }
-  
-  if (!data.objectives || !Array.isArray(data.objectives) || data.objectives.length === 0) {
-    return Response.json({ error: 'At least one objective is required' }, { status: 400 });
+
+  if (!data.treatmentPlan || data.treatmentPlan.trim() === '') {
+    return Response.json({ error: 'Treatment plan is required' }, { status: 400 });
   }
-  
+
   try {
     if (!process.env.OPENAI_API_KEY) {
       return Response.json({ error: 'OpenAI API key not configured' }, { status: 500 });
@@ -78,9 +78,8 @@ interface SessionData {
   clientGender?: 'male' | 'female' | null; // Gender for pronoun usage
   location: string;
   duration: string;
-  objectives: string[];
   feedback?: string;
-  treatmentPlan?: string;
+  treatmentPlan: string; // Required - treatment plan for this session
   interventions?: string[]; // Selected peer support interventions for this session
 }
 
@@ -91,7 +90,6 @@ function replacePlaceholders(text: string, data: SessionData): string {
     '{{clientName}}': data.clientName || 'Client',
     '{{location}}': data.location || '',
     '{{duration}}': duration.toString(),
-    '{{objectives}}': data.objectives.join(', '),
     '{{treatmentPlan}}': data.treatmentPlan || '',
     '{{selectedInterventions}}': data.interventions && data.interventions.length > 0
       ? data.interventions.map((i, idx) => `${idx + 1}. ${i}`).join('\n')
@@ -161,7 +159,6 @@ SESSION INFORMATION:
 - Client: ${data.clientName || 'Client'}${data.clientGender ? ` (${data.clientGender})` : ''}
 - Location: ${data.location}
 - Duration: ${duration} minutes
-- Session Objectives: ${data.objectives.join(', ')}
 ${treatmentPlanSection}${interventionsSection}${additionalNotesSection}
 
 INSTRUCTIONS FOR NOTE GENERATION:
@@ -176,7 +173,7 @@ INSTRUCTIONS FOR NOTE GENERATION:
    - Be factual, specific, and professional
    - Use peer support terminology (e.g., "peer support specialist", "mutual support", "shared experiences")
    - Include concrete examples and observations from the session
-   - Connect activities to the stated objectives
+   - Connect activities to the treatment plan goals
    - Keep each section focused and relevant
 ${data.clientGender ? `   - Use ${data.clientGender === 'male' ? 'he/him/his' : 'she/her/hers'} pronouns consistently for the client` : ''}
 
@@ -237,7 +234,6 @@ SESSION INFORMATION:
 - Client: ${data.clientName || 'Client'}${data.clientGender ? ` (${data.clientGender})` : ''}
 - Location: ${data.location}
 - Duration: ${duration} minutes
-- Session Objectives: ${data.objectives.join(', ')}
 ${treatmentPlanSection}${interventionsSection}${additionalNotesSection}
 
 INSTRUCTIONS FOR NOTE GENERATION:
@@ -250,19 +246,15 @@ ${data.interventions && data.interventions.length > 0
    - Describe how each of these specific interventions was applied during the session
    - Do NOT mention or use any interventions that are NOT in the selected list above
    - Connect session activities to these specific intervention approaches`
-  : data.treatmentPlan && data.treatmentPlan.trim().length > 0 
-  ? `   - Extract and reference relevant goals, objectives, and interventions from the treatment plan
-   - Align session activities with the treatment plan objectives listed above
+  : `   - Extract and reference relevant interventions from the treatment plan
    - Use general peer support approaches mentioned in the treatment plan when describing activities
-   - Connect session outcomes to treatment plan goals`
-  : `   - Focus on the session objectives provided above
-   - Use general peer support approaches aligned with the client's stated goals`}
+   - Connect session outcomes to the treatment plan goals`}
 
 2. ADDITIONAL NOTES:
-${data.feedback && data.feedback.trim().length > 0 
+${data.feedback && data.feedback.trim().length > 0
   ? `   - Incorporate the additional notes provided above into the appropriate sections
    - Use the notes to add specific details about client responses, activities, and observations`
-  : `   - Create appropriate content based on the session objectives and treatment plan`}
+  : `   - Create appropriate content based on the treatment plan`}
 
 3. TIME-BASED ACTIVITIES BREAKDOWN:
    - Break down the ${duration}-minute session into logical time segments
@@ -273,7 +265,7 @@ ${data.feedback && data.feedback.trim().length > 0
    - Be factual, specific, and professional
    - Use peer support terminology (e.g., "peer support specialist", "mutual support", "shared experiences")
    - Include concrete examples and observations from the session
-   - Connect activities to the stated objectives
+   - Connect activities to the treatment plan goals
    - Keep each section focused and relevant
 ${data.clientGender ? `   - Use ${data.clientGender === 'male' ? 'he/him/his' : 'she/her/hers'} pronouns consistently for the client throughout the note` : ''}
 
@@ -284,7 +276,7 @@ Location of Meeting:
 [Provide the location where the session took place]
 
 Focus of the Meeting:
-[Describe the primary focus of this peer support session. Explain what the session addressed and why it was important for the client. ${data.treatmentPlan && data.treatmentPlan.trim().length > 0 ? 'Reference the treatment plan for this session provided above.' : ''} Be specific and narrative - do not list goals or objectives separately.]
+[Describe the primary focus of this peer support session. Explain what the session addressed and why it was important for the client. Reference the treatment plan for this session provided above. Be specific and narrative.]
 
 Session Activities:
 [Provide a DETAILED and ROBUST breakdown of all activities during this ${duration}-minute session. Be very descriptive and specific. Include:

@@ -73,7 +73,6 @@ interface RefineData {
   clientName?: string;
   location?: string;
   duration?: number;
-  objectives?: string[];
   treatmentPlan?: string; // Session-specific treatment plan
   selectedInterventions?: string[]; // Selected interventions for this session
 }
@@ -90,13 +89,12 @@ async function buildRefinementPrompt(data: RefineData, template: MasterSessionTe
     : '';
   
   // Build context section if session details are provided
-  const contextSection = (data.clientName || data.location || data.duration || data.objectives || data.treatmentPlan || data.selectedInterventions)
+  const contextSection = (data.clientName || data.location || data.duration || data.treatmentPlan || data.selectedInterventions)
     ? `
 SESSION CONTEXT (for reference):
 ${data.clientName ? `- Client: ${data.clientName}` : ''}
 ${data.location ? `- Location: ${data.location}` : ''}
-${data.duration ? `- Duration: ${data.duration} minutes` : ''}
-${data.objectives && data.objectives.length > 0 ? `- Objectives: ${data.objectives.join(', ')}` : ''}${treatmentPlanSection}${interventionsSection}
+${data.duration ? `- Duration: ${data.duration} minutes` : ''}${treatmentPlanSection}${interventionsSection}
 `
     : '';
 

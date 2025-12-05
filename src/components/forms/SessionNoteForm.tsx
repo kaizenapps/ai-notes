@@ -3,7 +3,6 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useApp } from '@/context/AppContext';
 import { generateSessionNote } from '@/lib/openai';
-import { MultiSelect } from '@/components/ui/MultiSelect';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ToastNotification } from '@/components/ui/Notification';
 import { styles } from '@/lib/styles';
@@ -16,8 +15,6 @@ function SessionNoteFormContent() {
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
   const [selectedDuration, setSelectedDuration] = useState('60');
-  const [objectivesAutoPopulated, setObjectivesAutoPopulated] = useState(false);
-  const [selectedObjectives, setSelectedObjectives] = useState<string[]>([]);
   const [treatmentPlanText, setTreatmentPlanText] = useState('');
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
@@ -31,7 +28,7 @@ function SessionNoteFormContent() {
   });
   // Intervention selection state
   const [selectedInterventions, setSelectedInterventions] = useState<string[]>([]);
-  const { clients, locations, objectives } = useApp();
+  const { clients, locations } = useApp();
   const searchParams = useSearchParams();
 
   // Pre-select client from URL params
@@ -42,47 +39,21 @@ function SessionNoteFormContent() {
     }
   }, [searchParams, clients]);
 
-  // Auto-populate objectives and treatment plan when client is selected
+  // Auto-populate treatment plan when client is selected
   useEffect(() => {
     if (selectedClientId) {
       const selectedClient = clients.find(client => client.id === selectedClientId);
       if (selectedClient) {
-        // Auto-populate objectives (only if objectives are loaded)
-        if (selectedClient.objectivesSelected && selectedClient.objectivesSelected.length > 0 && objectives.length > 0) {
-          // Convert objective IDs to names for the form
-          const objectiveNames = selectedClient.objectivesSelected
-            .map(objId => {
-              const objective = objectives.find(obj => obj.id === objId);
-              return objective?.name;
-            })
-            .filter(Boolean) as string[];
-          
-          if (objectiveNames.length > 0) {
-            setSelectedObjectives(objectiveNames);
-            setObjectivesAutoPopulated(true);
-          } else {
-            // Client has objectives but none matched - clear selection
-            setSelectedObjectives([]);
-            setObjectivesAutoPopulated(false);
-          }
-        } else {
-          // No objectives selected for this client or objectives not loaded yet
-          setSelectedObjectives([]);
-          setObjectivesAutoPopulated(false);
-        }
-        
         // Auto-populate treatment plan
         setTreatmentPlanText(selectedClient.treatmentPlan || '');
         // Initialize selected interventions (empty - user will select)
         setSelectedInterventions([]);
       }
     } else {
-      setSelectedObjectives([]);
-      setObjectivesAutoPopulated(false);
       setTreatmentPlanText('');
       setSelectedInterventions([]);
     }
-  }, [selectedClientId, clients, objectives]);
+  }, [selectedClientId, clients]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -115,19 +86,18 @@ function SessionNoteFormContent() {
       setLoading(false);
       return;
     }
-    
-    if (selectedObjectives.length === 0) {
-      setError('Please select at least one objective.');
+
+    if (!treatmentPlanText.trim()) {
+      setError('Treatment plan is required. Please add a treatment plan for the client.');
       setLoading(false);
       return;
     }
-    
+
     console.log('Form submission data:', {
       clientId: clientIdValue,
       location: locationValue,
       duration: durationValue,
-      objectives: selectedObjectives,
-      hasTreatmentPlan: !!treatmentPlanText.trim()
+      treatmentPlan: treatmentPlanText.trim().substring(0, 100) + '...'
     });
     
     try {
@@ -150,7 +120,6 @@ function SessionNoteFormContent() {
         clientGender: selectedClient.gender || null, // Gender for pronoun usage (he/she)
         location: locationValue, // Use value from form, not state
         duration: durationValue, // Use value from form, not state
-        objectives: selectedObjectives, // MultiSelect uses controlled state (correct)
         feedback: feedbackValue, // Use value from form, not state
         treatmentPlan: treatmentPlanText.trim(), // Textarea uses controlled state (correct)
         interventions: selectedInterventions, // Selected interventions for this session
@@ -176,7 +145,6 @@ function SessionNoteFormContent() {
             generatedNote: note,
             customFeedback: sessionData.feedback,
             status: 'completed', // New sessions are completed when generated
-            objectives: selectedObjectives.map(obj => ({ custom: obj })),
             selectedInterventions: selectedInterventions,
             treatmentPlan: treatmentPlanText.trim(), // Session-specific treatment plan
           })
@@ -353,51 +321,25 @@ function SessionNoteFormContent() {
             ))}
           </select>
         </div>
-        
-        {/* Multi-select objectives */}
+
+        {/* Treatment Plan (Required) */}
         <div>
-          <label className={styles.label}>Goals/Objectives *</label>
-          {objectivesAutoPopulated && (
-            <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-2">
-              <p className="text-xs text-blue-800">
-                ✅ Objectives auto-populated from client profile. You can adjust as needed.
-              </p>
-            </div>
-          )}
-          <MultiSelect 
-            name="objectives"
-            options={objectives.map(o => ({ value: o.name, label: o.name }))}
-            placeholder="Search objectives..."
-            value={selectedObjectives}
-            onChange={(selected) => {
-              setSelectedObjectives(selected);
-              setObjectivesAutoPopulated(false); // User manually changed, no longer auto-populated
-            }}
-          />
-          {objectives.length === 0 && (
-            <p className="text-sm text-gray-600 mt-1">
-              Loading objectives... If this persists, contact your administrator.
-            </p>
-          )}
-        </div>
-        
-        {/* Treatment Plan */}
-        <div>
-          <label className={styles.label}>Treatment Plan (Session-Specific)</label>
+          <label className={styles.label}>Treatment Plan *</label>
           <p className="text-xs text-gray-600 mb-2">
-            Treatment plan is auto-populated from client profile for reference. You can edit it here for this session only - changes will NOT affect the client&apos;s treatment plan.
+            Treatment plan is auto-populated from client profile. You can edit it here for this session only - changes will NOT affect the client&apos;s profile.
           </p>
-          <textarea 
+          <textarea
             name="treatmentPlan"
             value={treatmentPlanText}
             onChange={(e) => setTreatmentPlanText(e.target.value)}
             className={`${styles.input} resize-none`}
             rows={8}
-            placeholder="Treatment plan will appear here when client is selected. Edit for this session only."
+            placeholder="Treatment plan is required. Add or paste the treatment plan for this session."
+            required
           />
-          {treatmentPlanText && (
-            <p className="text-xs text-blue-600 mt-1">
-              💡 This treatment plan is only for this session and will not update the client&apos;s profile.
+          {!treatmentPlanText && (
+            <p className="text-xs text-red-600 mt-1">
+              ⚠️ Treatment plan is required to generate session notes.
             </p>
           )}
         </div>

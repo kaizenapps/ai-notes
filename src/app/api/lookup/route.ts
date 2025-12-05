@@ -5,7 +5,6 @@ import { ApiResponse } from '@/types';
 
 interface LookupData {
   locations: Array<{ id: string; name: string }>;
-  objectives: Array<{ id: string; name: string; category?: string }>;
 }
 
 export async function GET(request: NextRequest) {
@@ -25,25 +24,16 @@ export async function GET(request: NextRequest) {
 
     // Fetch all lookup data with individual error handling
     let locations: Array<{ id: string; name: string }> = [];
-    let objectives: Array<{ id: string; name: string; category?: string }> = [];
-    
+
     try {
       locations = await lookupDb.getLocations();
     } catch (locationError) {
       console.error('Error fetching locations:', locationError);
       // Return empty array instead of failing completely
     }
-    
-    try {
-      objectives = await lookupDb.getObjectives();
-    } catch (objectiveError) {
-      console.error('Error fetching objectives:', objectiveError);
-      // Return empty array instead of failing completely
-    }
 
     const lookupData: LookupData = {
-      locations,
-      objectives
+      locations
     };
 
     const response: ApiResponse<LookupData> = {
