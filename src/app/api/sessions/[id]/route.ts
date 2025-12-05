@@ -75,8 +75,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       locationOther,
       generatedNote,
       customFeedback,
-      status,
-      objectives
+      status
     } = body;
 
     // Update session in database
@@ -87,11 +86,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       locationOther,
       generatedNote,
       customFeedback,
-      status,
-      objectives: objectives?.map((obj: { id?: string; custom?: string; name?: string }) => ({
-        id: obj.id,
-        custom: obj.custom || obj.name
-      }))
+      status
     }, payload.userId);
 
     if (!session) {

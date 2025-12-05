@@ -10,7 +10,6 @@ import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { Client as ClientType } from '@/types';
 import { UserManager } from '@/components/admin/UserManager';
 import { TemplateManager } from '@/components/admin/TemplateManager';
-import { MultiSelect } from '@/components/ui/MultiSelect';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ToastNotification } from '@/components/ui/Notification';
 import Link from 'next/link';

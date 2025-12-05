@@ -12,12 +12,12 @@ export interface SessionCardProps {
     date: Date | string;
     duration: number;
     location: string;
-    objectives: string[];
     generatedNote: string;
     feedback?: string;
     status: 'draft' | 'completed' | 'archived';
     createdAt: Date | string;
     treatmentPlan?: string;
+    selectedInterventions?: string[];
   };
   onEdit?: (session: SessionCardProps['session']) => void;
   onDelete?: (sessionId: string) => void;

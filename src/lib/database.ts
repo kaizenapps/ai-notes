@@ -276,7 +276,7 @@ export const clientDb = {
     gender?: 'male' | 'female';
     address?: string;
     dateOfBirth?: string;
-    treatmentPlan: string; // Required
+    treatmentPlan?: string;
     extractedInterventions?: string[];
     createdBy: string;
   }): Promise<Client> {
@@ -385,7 +385,7 @@ export const sessionDb = {
     locationOther?: string;
     generatedNote: string;
     customFeedback?: string;
-    treatmentPlan: string; // Required
+    treatmentPlan?: string;
     selectedInterventions?: string[];
     status?: 'draft' | 'completed' | 'archived';
   }): Promise<SessionNote> {

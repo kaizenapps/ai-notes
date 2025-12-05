@@ -414,11 +414,9 @@ function SessionNoteFormContent() {
               setSelectedClientId('');
               setSelectedLocation('');
               setSelectedDuration('60');
-              setSelectedObjectives([]);
               setTreatmentPlanText('');
               setGeneratedNote('');
               setLastSessionId(null);
-              setObjectivesAutoPopulated(false);
               setSelectedInterventions([]);
             }}
             className={styles.button.secondary}

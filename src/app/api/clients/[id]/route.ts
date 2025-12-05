@@ -68,7 +68,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     // Parse request body
     const body = await request.json();
-    const { firstName, lastInitial, lastName, gender, address, dateOfBirth, treatmentPlan, objectivesSelected, extractedInterventions } = body;
+    const { firstName, lastInitial, lastName, gender, address, dateOfBirth, treatmentPlan, extractedInterventions } = body;
 
     // Validate gender if provided
     if (gender !== undefined && gender !== null && !['male', 'female'].includes(gender)) {
@@ -92,7 +92,6 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       address,
       dateOfBirth,
       treatmentPlan,
-      objectivesSelected,
       extractedInterventions
     }, payload.userId);
 

@@ -86,14 +86,9 @@ export async function POST(request: NextRequest) {
 
 interface ExtractionData {
   treatmentPlan: string;
-  objectives?: string[];
 }
 
 function buildExtractionPrompt(data: ExtractionData): string {
-  const objectivesSection = data.objectives && data.objectives.length > 0
-    ? `\n\nCLIENT'S SELECTED OBJECTIVES:\n${data.objectives.map((obj, idx) => `${idx + 1}. ${obj}`).join('\n')}`
-    : '';
-  
   return `Analyze the following treatment plan and extract 3-5 specific PEER SUPPORT interventions.
 
 IMPORTANT CONTEXT:
@@ -103,7 +98,6 @@ IMPORTANT CONTEXT:
 
 TREATMENT PLAN:
 ${data.treatmentPlan}
-${objectivesSection}
 
 CRITICAL INSTRUCTIONS:
 1. ONLY extract interventions that are ACTUALLY MENTIONED or CLEARLY IMPLIED in the treatment plan above

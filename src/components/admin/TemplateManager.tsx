@@ -106,9 +106,8 @@ export function TemplateManager() {
     { name: '{{clientName}}', description: 'Client name (e.g., "Jane S.")' },
     { name: '{{location}}', description: 'Session location' },
     { name: '{{duration}}', description: 'Session duration in minutes' },
-    { name: '{{objectives}}', description: 'Comma-separated list of objectives' },
     { name: '{{treatmentPlan}}', description: 'Treatment plan for this session' },
-    { name: '{{selectedInterventions}}', description: 'Selected interventions for this session' }
+    { name: '{{selectedInterventions}}', description: 'Selected peer support interventions for this session' }
   ];
 
   if (loading) {

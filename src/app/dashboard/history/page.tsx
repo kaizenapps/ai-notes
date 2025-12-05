@@ -155,7 +155,6 @@ function HistoryPageContent() {
                 date: new Date(Date.now() - 86400000), // Yesterday
                 duration: 60,
                 location: 'Telehealth',
-                objectives: ['Improve coping skills', 'Manage anxiety symptoms'],
                 generatedNote: 'Client engaged well in today\'s session. We focused on developing coping strategies for managing anxiety in daily situations.',
                 createdAt: new Date(Date.now() - 86400000),
                 client_name: 'John D.',
@@ -168,7 +167,6 @@ function HistoryPageContent() {
                 date: new Date(Date.now() - 172800000), // 2 days ago
                 duration: 45,
                 location: 'Office',
-                objectives: ['Build self-esteem', 'Enhance communication skills'],
                 generatedNote: 'Session focused on building client\'s confidence and improving communication patterns with family members.',
                 createdAt: new Date(Date.now() - 172800000),
                 client_name: 'Jane S.',
@@ -474,7 +472,6 @@ function HistoryPageContent() {
           clientName: refiningSession.client_name,
           location: refiningSession.location,
           duration: refiningSession.duration,
-          objectives: refiningSession.objectives,
           treatmentPlan: refiningSession.treatmentPlan,
           selectedInterventions: refiningSession.selectedInterventions || []
         })
@@ -603,7 +600,7 @@ function HistoryPageContent() {
               <div className="relative max-w-md">
                 <input
                   type="text"
-                  placeholder="Search sessions by client name, notes, or objectives..."
+                  placeholder="Search sessions by client name or notes..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -695,7 +692,6 @@ function HistoryPageContent() {
                   return (
                     session.client_name?.toLowerCase().includes(searchLower) ||
                     session.generatedNote.toLowerCase().includes(searchLower) ||
-                    session.objectives.some(obj => obj.toLowerCase().includes(searchLower)) ||
                     session.feedback?.toLowerCase().includes(searchLower)
                   );
                 })

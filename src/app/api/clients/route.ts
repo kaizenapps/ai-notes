@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { firstName, lastInitial, lastName, gender, address, dateOfBirth, treatmentPlan, objectivesSelected, extractedInterventions } = body;
+    const { firstName, lastInitial, lastName, gender, address, dateOfBirth, treatmentPlan, extractedInterventions } = body;
 
     // Validate required fields
     if (!firstName) {
@@ -89,8 +89,7 @@ export async function POST(request: NextRequest) {
       gender: gender || null,
       address: address || null,
       dateOfBirth: dateOfBirth || null,
-      treatmentPlan,
-      objectivesSelected: objectivesSelected || [],
+      treatmentPlan: treatmentPlan || '',
       extractedInterventions: extractedInterventions || [],
       createdBy: payload.userId
     });

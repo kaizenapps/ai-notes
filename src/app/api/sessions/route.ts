@@ -98,20 +98,19 @@ export async function POST(request: NextRequest) {
       customFeedback,
       treatmentPlan,
       selectedInterventions,
-      status,
-      objectives
+      status
     } = body;
 
     // Validate required fields
     if (!clientId || !sessionDate || !duration || !generatedNote) {
-      return Response.json({ 
-        error: 'Missing required fields: clientId, sessionDate, duration, generatedNote' 
+      return Response.json({
+        error: 'Missing required fields: clientId, sessionDate, duration, generatedNote'
       }, { status: 400 });
     }
 
-    if (!objectives || !Array.isArray(objectives) || objectives.length === 0) {
-      return Response.json({ 
-        error: 'At least one objective is required' 
+    if (!treatmentPlan || treatmentPlan.trim() === '') {
+      return Response.json({
+        error: 'Treatment plan is required'
       }, { status: 400 });
     }
 
@@ -125,13 +124,9 @@ export async function POST(request: NextRequest) {
       locationOther,
       generatedNote,
       customFeedback,
-      treatmentPlan: treatmentPlan || null,
+      treatmentPlan: treatmentPlan,
       selectedInterventions: selectedInterventions || [],
-      status: status || 'draft',
-      objectives: objectives.map((obj: { id?: string; custom?: string; name?: string }) => ({
-        id: obj.id,
-        custom: obj.custom || obj.name
-      }))
+      status: status || 'draft'
     });
 
     const response: ApiResponse<SessionNote> = {

@@ -26,7 +26,7 @@ export interface SessionNote {
   location: string;
   generatedNote: string;
   feedback?: string;
-  treatmentPlan: string; // Required - treatment plan for this session
+  treatmentPlan?: string; // Treatment plan for this session (optional in type for backward compat, required in API)
   selectedInterventions?: string[]; // Interventions selected for this session
   status?: 'draft' | 'completed' | 'archived';
   createdAt: Date;
@@ -39,7 +39,7 @@ export interface FormData {
   location: string;
   duration: string;
   feedback?: string;
-  treatmentPlan: string; // Required - treatment plan for this session
+  treatmentPlan?: string; // Treatment plan for this session
   interventions?: string[]; // Selected peer support interventions for this session
 }
 
