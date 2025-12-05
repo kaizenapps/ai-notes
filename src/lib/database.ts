@@ -237,15 +237,12 @@ export const clientDb = {
         `SELECT id, first_name as "firstName", last_initial as "lastInitial",
          last_name as "lastName", gender, address, date_of_birth as "dateOfBirth",
          treatment_plan as "treatmentPlan",
-         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
          COALESCE(extracted_interventions, '{}') as "extractedInterventions"
          FROM clients WHERE is_active = true ORDER BY first_name, last_initial`
       );
-      // Parse JSON strings to arrays
       return result.rows.map(row => ({
         ...row,
         dateOfBirth: row.dateOfBirth ? row.dateOfBirth.toISOString().split('T')[0] : null,
-        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
         extractedInterventions: row.extractedInterventions || []
       }));
     });
@@ -258,18 +255,15 @@ export const clientDb = {
         `SELECT id, first_name as "firstName", last_initial as "lastInitial",
          last_name as "lastName", gender, address, date_of_birth as "dateOfBirth",
          treatment_plan as "treatmentPlan",
-         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
          COALESCE(extracted_interventions, '{}') as "extractedInterventions"
          FROM clients WHERE id = $1 AND is_active = true`,
         [id]
       );
       if (!result.rows[0]) return null;
-      // Parse JSON string to array
       const row = result.rows[0];
       return {
         ...row,
         dateOfBirth: row.dateOfBirth ? row.dateOfBirth.toISOString().split('T')[0] : null,
-        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
         extractedInterventions: row.extractedInterventions || []
       };
     });
@@ -282,31 +276,27 @@ export const clientDb = {
     gender?: 'male' | 'female';
     address?: string;
     dateOfBirth?: string;
-    treatmentPlan?: string;
-    objectivesSelected?: string[];
+    treatmentPlan: string; // Required
     extractedInterventions?: string[];
     createdBy: string;
   }): Promise<Client> {
     return withDatabase(async (client) => {
       await setAuditUser(client, clientData.createdBy);
-      const objectivesJson = clientData.objectivesSelected ? JSON.stringify(clientData.objectivesSelected) : '[]';
       const result = await client.query(
-        `INSERT INTO clients (first_name, last_initial, last_name, gender, address, date_of_birth, treatment_plan, objectives_selected, extracted_interventions, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)
+        `INSERT INTO clients (first_name, last_initial, last_name, gender, address, date_of_birth, treatment_plan, extracted_interventions, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING id, first_name as "firstName", last_initial as "lastInitial",
          last_name as "lastName", gender, address, date_of_birth as "dateOfBirth",
          treatment_plan as "treatmentPlan",
-         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
          COALESCE(extracted_interventions, '{}') as "extractedInterventions"`,
         [clientData.firstName, clientData.lastInitial, clientData.lastName || null, clientData.gender || null,
          clientData.address || null, clientData.dateOfBirth || null, clientData.treatmentPlan,
-         objectivesJson, clientData.extractedInterventions || [], clientData.createdBy]
+         clientData.extractedInterventions || [], clientData.createdBy]
       );
       const row = result.rows[0];
       return {
         ...row,
         dateOfBirth: row.dateOfBirth ? row.dateOfBirth.toISOString().split('T')[0] : null,
-        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
         extractedInterventions: row.extractedInterventions || []
       };
     });
@@ -320,7 +310,6 @@ export const clientDb = {
     address?: string;
     dateOfBirth?: string | null;
     treatmentPlan?: string;
-    objectivesSelected?: string[];
     extractedInterventions?: string[];
   }, userId: string): Promise<Client | null> {
     return withDatabase(async (client) => {
@@ -357,10 +346,6 @@ export const clientDb = {
         setClauses.push(`treatment_plan = $${paramCount++}`);
         values.push(clientData.treatmentPlan);
       }
-      if (clientData.objectivesSelected !== undefined) {
-        setClauses.push(`objectives_selected = $${paramCount++}::jsonb`);
-        values.push(JSON.stringify(clientData.objectivesSelected));
-      }
       if (clientData.extractedInterventions !== undefined) {
         setClauses.push(`extracted_interventions = $${paramCount++}`);
         values.push(clientData.extractedInterventions);
@@ -375,7 +360,6 @@ export const clientDb = {
          RETURNING id, first_name as "firstName", last_initial as "lastInitial",
          last_name as "lastName", gender, address, date_of_birth as "dateOfBirth",
          treatment_plan as "treatmentPlan",
-         COALESCE(objectives_selected, '[]'::jsonb)::text as "objectivesSelected",
          COALESCE(extracted_interventions, '{}') as "extractedInterventions"`,
         values
       );
@@ -384,7 +368,6 @@ export const clientDb = {
       return {
         ...row,
         dateOfBirth: row.dateOfBirth ? row.dateOfBirth.toISOString().split('T')[0] : null,
-        objectivesSelected: row.objectivesSelected ? JSON.parse(row.objectivesSelected) : [],
         extractedInterventions: row.extractedInterventions || []
       };
     });
@@ -402,68 +385,36 @@ export const sessionDb = {
     locationOther?: string;
     generatedNote: string;
     customFeedback?: string;
-    treatmentPlan?: string;
+    treatmentPlan: string; // Required
     selectedInterventions?: string[];
     status?: 'draft' | 'completed' | 'archived';
-    objectives: Array<{ id?: string; custom?: string }>;
   }): Promise<SessionNote> {
     return withDatabase(async (client) => {
       // Validate userId before proceeding
       if (!sessionData.userId || sessionData.userId.trim() === '') {
         throw new Error('Invalid userId provided for session creation');
       }
-      
+
       await setAuditUser(client, sessionData.userId);
-      
-      // Start transaction
-      await client.query('BEGIN');
-      
-      try {
-        // Insert session note
-        const sessionResult = await client.query(
-          `INSERT INTO session_notes (client_id, user_id, session_date, duration_minutes, location_id, location_other, generated_note, custom_feedback, treatment_plan, selected_interventions, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-           RETURNING id, client_id as "clientId", user_id as "userId", session_date as date, duration_minutes as duration, 
-                     location_other as location, generated_note as "generatedNote", custom_feedback as feedback, 
-                     treatment_plan as "treatmentPlan", COALESCE(selected_interventions, '{}') as "selectedInterventions", status, created_at as "createdAt"`,
-          [sessionData.clientId, sessionData.userId, sessionData.sessionDate, sessionData.duration, 
-           sessionData.locationId, sessionData.locationOther, sessionData.generatedNote, sessionData.customFeedback, 
-           sessionData.treatmentPlan || null, sessionData.selectedInterventions || [], sessionData.status || 'draft']
-        );
-        
-        const session = sessionResult.rows[0];
-        
-        // Insert objectives
-        const objectives = [];
-        for (const objective of sessionData.objectives) {
-          if (objective.id) {
-            await client.query(
-              'INSERT INTO session_objectives (session_note_id, objective_id) VALUES ($1, $2)',
-              [session.id, objective.id]
-            );
-            // Get objective name
-            const objResult = await client.query('SELECT name FROM treatment_objectives WHERE id = $1', [objective.id]);
-            objectives.push(objResult.rows[0]?.name || '');
-          } else if (objective.custom) {
-            await client.query(
-              'INSERT INTO session_objectives (session_note_id, custom_objective) VALUES ($1, $2)',
-              [session.id, objective.custom]
-            );
-            objectives.push(objective.custom);
-          }
-        }
-        
-        await client.query('COMMIT');
-        
-        return {
-          ...session,
-          objectives,
-          selectedInterventions: session.selectedInterventions || []
-        };
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
+
+      // Insert session note
+      const sessionResult = await client.query(
+        `INSERT INTO session_notes (client_id, user_id, session_date, duration_minutes, location_id, location_other, generated_note, custom_feedback, treatment_plan, selected_interventions, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         RETURNING id, client_id as "clientId", user_id as "userId", session_date as date, duration_minutes as duration,
+                   location_other as location, generated_note as "generatedNote", custom_feedback as feedback,
+                   treatment_plan as "treatmentPlan", COALESCE(selected_interventions, '{}') as "selectedInterventions", status, created_at as "createdAt"`,
+        [sessionData.clientId, sessionData.userId, sessionData.sessionDate, sessionData.duration,
+         sessionData.locationId, sessionData.locationOther, sessionData.generatedNote, sessionData.customFeedback,
+         sessionData.treatmentPlan, sessionData.selectedInterventions || [], sessionData.status || 'draft']
+      );
+
+      const session = sessionResult.rows[0];
+
+      return {
+        ...session,
+        selectedInterventions: session.selectedInterventions || []
+      };
     });
   },
 
@@ -506,25 +457,12 @@ export const sessionDb = {
       params.push(limit, offset);
       
       const result = await client.query(query, params);
-      
-      // Get objectives and interventions for each session
-      const sessions = await Promise.all(result.rows.map(async (session) => {
-        const objectivesResult = await client.query(
-          `SELECT COALESCE(obj.name, so.custom_objective) as name
-           FROM session_objectives so
-           LEFT JOIN treatment_objectives obj ON so.objective_id = obj.id
-           WHERE so.session_note_id = $1`,
-          [session.id]
-        );
-        
-        return {
-          ...session,
-          objectives: objectivesResult.rows.map(row => row.name),
-          selectedInterventions: session.selectedInterventions || []
-        };
+
+      // Return sessions with selectedInterventions
+      return result.rows.map(session => ({
+        ...session,
+        selectedInterventions: session.selectedInterventions || []
       }));
-      
-      return sessions;
     });
   },
 
@@ -533,17 +471,17 @@ export const sessionDb = {
   },
 
   async findByDateRange(
-    userId: string, 
-    startDate: Date, 
-    endDate: Date, 
-    limit = 50, 
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+    limit = 50,
     offset = 0
   ): Promise<SessionNote[]> {
     return withDatabase(async (client) => {
       await setAuditUser(client, userId);
-      
+
       const result = await client.query(
-        `SELECT sn.id, sn.client_id as "clientId", sn.user_id as "userId", 
+        `SELECT sn.id, sn.client_id as "clientId", sn.user_id as "userId",
                 sn.session_date as date, sn.duration_minutes as duration,
                 COALESCE(sl.name, sn.location_other) as location,
                 sn.generated_note as "generatedNote", sn.custom_feedback as feedback,
@@ -561,25 +499,12 @@ export const sessionDb = {
          LIMIT $4 OFFSET $5`,
         [userId, startDate, endDate, limit, offset]
       );
-      
-      // Get objectives and interventions for each session
-      const sessions = await Promise.all(result.rows.map(async (session) => {
-        const objectivesResult = await client.query(
-          `SELECT COALESCE(obj.name, so.custom_objective) as name
-           FROM session_objectives so
-           LEFT JOIN treatment_objectives obj ON so.objective_id = obj.id
-           WHERE so.session_note_id = $1`,
-          [session.id]
-        );
-        
-        return {
-          ...session,
-          objectives: objectivesResult.rows.map(row => row.name),
-          selectedInterventions: session.selectedInterventions || []
-        };
+
+      // Return sessions with selectedInterventions
+      return result.rows.map(session => ({
+        ...session,
+        selectedInterventions: session.selectedInterventions || []
       }));
-      
-      return sessions;
     });
   },
 
@@ -595,102 +520,68 @@ export const sessionDb = {
       treatmentPlan?: string;
       selectedInterventions?: string[];
       status?: 'draft' | 'completed' | 'archived';
-      objectives?: Array<{ id?: string; custom?: string }>;
     },
     userId: string
   ): Promise<SessionNote | null> {
     return withDatabase(async (client) => {
       await setAuditUser(client, userId);
-      
-      // Start transaction
-      await client.query('BEGIN');
-      
-      try {
-        // Build dynamic update query
-        const setClauses = [];
-        const values = [];
-        let paramCount = 1;
 
-        if (sessionData.sessionDate !== undefined) {
-          setClauses.push(`session_date = $${paramCount++}`);
-          values.push(sessionData.sessionDate);
-        }
-        if (sessionData.duration !== undefined) {
-          setClauses.push(`duration_minutes = $${paramCount++}`);
-          values.push(sessionData.duration);
-        }
-        if (sessionData.locationId !== undefined) {
-          setClauses.push(`location_id = $${paramCount++}`);
-          values.push(sessionData.locationId);
-        }
-        if (sessionData.locationOther !== undefined) {
-          setClauses.push(`location_other = $${paramCount++}`);
-          values.push(sessionData.locationOther);
-        }
-        if (sessionData.generatedNote !== undefined) {
-          setClauses.push(`generated_note = $${paramCount++}`);
-          values.push(sessionData.generatedNote);
-        }
-        if (sessionData.customFeedback !== undefined) {
-          setClauses.push(`custom_feedback = $${paramCount++}`);
-          values.push(sessionData.customFeedback);
-        }
-        if (sessionData.treatmentPlan !== undefined) {
-          setClauses.push(`treatment_plan = $${paramCount++}`);
-          values.push(sessionData.treatmentPlan);
-        }
-        if (sessionData.selectedInterventions !== undefined) {
-          setClauses.push(`selected_interventions = $${paramCount++}`);
-          values.push(sessionData.selectedInterventions);
-        }
-        if (sessionData.status !== undefined) {
-          setClauses.push(`status = $${paramCount++}`);
-          values.push(sessionData.status);
-        }
+      // Build dynamic update query
+      const setClauses = [];
+      const values = [];
+      let paramCount = 1;
 
-        if (setClauses.length === 0 && !sessionData.objectives) {
-          await client.query('ROLLBACK');
-          return null;
-        }
-
-        // Update session if there are field changes
-        if (setClauses.length > 0) {
-          values.push(id, userId);
-          await client.query(
-            `UPDATE session_notes SET ${setClauses.join(', ')}, updated_at = CURRENT_TIMESTAMP
-             WHERE id = $${paramCount++} AND user_id = $${paramCount++}`,
-            values
-          );
-        }
-
-        // Update objectives if provided
-        if (sessionData.objectives) {
-          await client.query('DELETE FROM session_objectives WHERE session_note_id = $1', [id]);
-          
-          for (const objective of sessionData.objectives) {
-            if (objective.id) {
-              await client.query(
-                'INSERT INTO session_objectives (session_note_id, objective_id) VALUES ($1, $2)',
-                [id, objective.id]
-              );
-            } else if (objective.custom) {
-              await client.query(
-                'INSERT INTO session_objectives (session_note_id, custom_objective) VALUES ($1, $2)',
-                [id, objective.custom]
-              );
-            }
-          }
-        }
-
-
-        await client.query('COMMIT');
-        
-        // Return updated session
-        return await this.findById(id, userId);
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
+      if (sessionData.sessionDate !== undefined) {
+        setClauses.push(`session_date = $${paramCount++}`);
+        values.push(sessionData.sessionDate);
       }
+      if (sessionData.duration !== undefined) {
+        setClauses.push(`duration_minutes = $${paramCount++}`);
+        values.push(sessionData.duration);
+      }
+      if (sessionData.locationId !== undefined) {
+        setClauses.push(`location_id = $${paramCount++}`);
+        values.push(sessionData.locationId);
+      }
+      if (sessionData.locationOther !== undefined) {
+        setClauses.push(`location_other = $${paramCount++}`);
+        values.push(sessionData.locationOther);
+      }
+      if (sessionData.generatedNote !== undefined) {
+        setClauses.push(`generated_note = $${paramCount++}`);
+        values.push(sessionData.generatedNote);
+      }
+      if (sessionData.customFeedback !== undefined) {
+        setClauses.push(`custom_feedback = $${paramCount++}`);
+        values.push(sessionData.customFeedback);
+      }
+      if (sessionData.treatmentPlan !== undefined) {
+        setClauses.push(`treatment_plan = $${paramCount++}`);
+        values.push(sessionData.treatmentPlan);
+      }
+      if (sessionData.selectedInterventions !== undefined) {
+        setClauses.push(`selected_interventions = $${paramCount++}`);
+        values.push(sessionData.selectedInterventions);
+      }
+      if (sessionData.status !== undefined) {
+        setClauses.push(`status = $${paramCount++}`);
+        values.push(sessionData.status);
+      }
+
+      if (setClauses.length === 0) {
+        return null;
+      }
+
+      // Update session
+      values.push(id, userId);
+      await client.query(
+        `UPDATE session_notes SET ${setClauses.join(', ')}, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $${paramCount++} AND user_id = $${paramCount++}`,
+        values
+      );
+
+      // Return updated session
+      return await this.findById(id, userId);
     });
   },
 
@@ -730,9 +621,9 @@ export const sessionDb = {
   async findById(id: string, userId: string): Promise<SessionNote | null> {
     return withDatabase(async (client) => {
       await setAuditUser(client, userId);
-      
+
       const result = await client.query(
-        `SELECT sn.id, sn.client_id as "clientId", sn.user_id as "userId", 
+        `SELECT sn.id, sn.client_id as "clientId", sn.user_id as "userId",
                 sn.session_date as date, sn.duration_minutes as duration,
                 COALESCE(sl.name, sn.location_other) as location,
                 sn.generated_note as "generatedNote", sn.custom_feedback as feedback,
@@ -744,23 +635,13 @@ export const sessionDb = {
          WHERE sn.id = $1 AND sn.user_id = $2`,
         [id, userId]
       );
-      
+
       if (!result.rows[0]) return null;
-      
+
       const session = result.rows[0];
-      
-      // Get objectives
-      const objectivesResult = await client.query(
-        `SELECT COALESCE(obj.name, so.custom_objective) as name
-         FROM session_objectives so
-         LEFT JOIN treatment_objectives obj ON so.objective_id = obj.id
-         WHERE so.session_note_id = $1`,
-        [id]
-      );
-      
+
       return {
         ...session,
-        objectives: objectivesResult.rows.map(row => row.name),
         selectedInterventions: session.selectedInterventions || []
       };
     });
@@ -777,17 +658,7 @@ export const lookupDb = {
       );
       return result.rows;
     });
-  },
-
-  async getObjectives(): Promise<Array<{ id: string; name: string; category?: string }>> {
-    return withDatabase(async (client) => {
-      const result = await client.query(
-        'SELECT id, name, category FROM treatment_objectives WHERE is_active = true ORDER BY category, name'
-      );
-      return result.rows;
-    });
-  },
-
+  }
 };
 
 // Health check

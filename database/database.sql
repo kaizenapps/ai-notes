@@ -3,9 +3,12 @@
 -- ============================================================================
 -- Updated: Latest version with all recent changes
 -- - Removed: session_templates table
--- - Removed: interventions table  
+-- - Removed: interventions table
 -- - Removed: session_interventions table
--- - Added: objectives_selected column to clients table
+-- - Removed: treatment_objectives table (objectives feature removed)
+-- - Removed: session_objectives table (objectives feature removed)
+-- - Removed: objectives_selected column from clients (now using treatment plan)
+-- - Treatment plan is now the primary source for session note generation
 -- ============================================================================
 
 -- Enable required extensions
@@ -48,8 +51,7 @@ CREATE TABLE IF NOT EXISTS clients (
     gender VARCHAR(10) CHECK (gender IN ('male', 'female')),
     address TEXT,
     date_of_birth DATE,
-    treatment_plan TEXT,
-    objectives_selected JSONB DEFAULT '[]'::jsonb,
+    treatment_plan TEXT NOT NULL, -- Required for session note generation
     extracted_interventions TEXT[] DEFAULT '{}',
     is_active BOOLEAN DEFAULT true,
     created_by UUID REFERENCES users(id),
@@ -61,12 +63,11 @@ CREATE TABLE IF NOT EXISTS clients (
 CREATE INDEX IF NOT EXISTS idx_clients_first_name ON clients(first_name);
 CREATE INDEX IF NOT EXISTS idx_clients_is_active ON clients(is_active);
 CREATE INDEX IF NOT EXISTS idx_clients_created_by ON clients(created_by);
-CREATE INDEX IF NOT EXISTS idx_clients_objectives_selected ON clients USING GIN (objectives_selected);
 CREATE INDEX IF NOT EXISTS idx_clients_extracted_interventions ON clients USING GIN (extracted_interventions);
 CREATE INDEX IF NOT EXISTS idx_clients_gender ON clients(gender);
 
 -- Comments for documentation
-COMMENT ON COLUMN clients.objectives_selected IS 'Array of objective IDs pre-selected for this client profile';
+COMMENT ON COLUMN clients.treatment_plan IS 'Treatment plan text - required for generating session notes. Peer Support Interventions are extracted from this.';
 COMMENT ON COLUMN clients.extracted_interventions IS 'AI-extracted peer support interventions from treatment plan. Format: "[Category] - [Description]"';
 COMMENT ON COLUMN clients.gender IS 'Client gender (male/female) - used for AI pronoun generation';
 COMMENT ON COLUMN clients.address IS 'Client home address - used for location context, not displayed in session notes';
@@ -95,22 +96,11 @@ SELECT 'Client''s Home', 'Session conducted at the client''s residence', true
 WHERE NOT EXISTS (SELECT 1 FROM session_locations WHERE name = 'Client''s Home');
 
 -- ============================================================================
--- TREATMENT OBJECTIVES TABLE
+-- NOTE: TREATMENT OBJECTIVES TABLE REMOVED
 -- ============================================================================
--- Stores available treatment objectives/goals
-CREATE TABLE IF NOT EXISTS treatment_objectives (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL,
-    category VARCHAR(100),
-    description TEXT,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Indexes for treatment_objectives
-CREATE INDEX IF NOT EXISTS idx_treatment_objectives_name ON treatment_objectives(name);
-CREATE INDEX IF NOT EXISTS idx_treatment_objectives_category ON treatment_objectives(category);
-CREATE INDEX IF NOT EXISTS idx_treatment_objectives_is_active ON treatment_objectives(is_active);
+-- The treatment_objectives table has been removed.
+-- Session notes now rely on Treatment Plan and extracted Peer Support Interventions.
+-- See migration: database/remove_objectives.sql
 
 -- ============================================================================
 -- SESSION NOTES TABLE
@@ -143,24 +133,11 @@ CREATE INDEX IF NOT EXISTS idx_session_notes_created_at ON session_notes(created
 CREATE INDEX IF NOT EXISTS idx_session_notes_selected_interventions ON session_notes USING GIN (selected_interventions);
 
 -- ============================================================================
--- SESSION OBJECTIVES JUNCTION TABLE
+-- NOTE: SESSION OBJECTIVES JUNCTION TABLE REMOVED
 -- ============================================================================
--- Links session notes to treatment objectives (many-to-many relationship)
-CREATE TABLE IF NOT EXISTS session_objectives (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    session_note_id UUID NOT NULL REFERENCES session_notes(id) ON DELETE CASCADE,
-    objective_id UUID REFERENCES treatment_objectives(id) ON DELETE SET NULL,
-    custom_objective TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_objective_or_custom CHECK (
-        (objective_id IS NOT NULL AND custom_objective IS NULL) OR
-        (objective_id IS NULL AND custom_objective IS NOT NULL)
-    )
-);
-
--- Indexes for session_objectives
-CREATE INDEX IF NOT EXISTS idx_session_objectives_session_note_id ON session_objectives(session_note_id);
-CREATE INDEX IF NOT EXISTS idx_session_objectives_objective_id ON session_objectives(objective_id);
+-- The session_objectives table has been removed.
+-- Session notes now use treatment_plan and selected_interventions columns directly.
+-- See migration: database/remove_objectives.sql
 
 -- ============================================================================
 -- MASTER SESSION NOTE TEMPLATE TABLE
